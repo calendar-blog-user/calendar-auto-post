@@ -42,7 +42,6 @@ class CalendarGenerator:
         moon_age = days_since % 29.530588853
         
         # 旧暦の月を計算（簡易版）
-        # 新暦と旧暦のズレを考慮
         lunar_offset = -1 if month <= 2 else 0
         lunar_month = ((month + 9 + lunar_offset) % 12) or 12
         
@@ -104,7 +103,7 @@ class CalendarGenerator:
         month = self.target_date.month
         day = self.target_date.day
         
-        # 二十四節気の定義（2025年基準、年によって±1日変動）
+        # 二十四節気の定義（2025年基準）
         sekki_dates = [
             (1, 5, "小寒", "寒さが厳しくなり始める頃"),
             (1, 20, "大寒", "一年で最も寒い時期"),
@@ -224,7 +223,7 @@ class CalendarGenerator:
                 current_kou = (name, reading, desc)
                 break
         if not current_kou:
-            current_kou = kou_dates[-1][2:]
+            current_kou = ("朔風払葉", "きたかぜこのはをはらう", "北風が木の葉を払い落とす")
         
         return {
             'sekki': current_sekki,
@@ -237,33 +236,33 @@ class CalendarGenerator:
         
         # 旬の食材（月ごと）
         seasonal_foods = {
-            1: ["白菜", "ネギ", "小松菜", "大根", "みかん", "金柑", "鱈", "寒ブリ", "牡蠣", "あんこう"],
-            2: ["白菜", "ネギ", "ブロッコリー", "カリフラワー", "いちご", "キウイ", "鰆", "わかめ", "牡蠣"],
-            3: ["菜の花", "春キャベツ", "新玉ねぎ", "アスパラガス", "いちご", "デコポン", "桜鯛", "ホタルイカ", "あさり"],
-            4: ["筍", "新じゃがいも", "春キャベツ", "そら豆", "いちご", "グレープフルーツ", "初鰹", "桜えび", "あさり"],
-            5: ["新玉ねぎ", "そら豆", "グリーンピース", "新生姜", "さくらんぼ", "メロン", "初鰹", "アジ", "イサキ"],
-            6: ["梅", "らっきょう", "新生姜", "ズッキーニ", "さくらんぼ", "びわ", "アジ", "イワシ", "穴子"],
-            7: ["トマト", "きゅうり", "なす", "ピーマン", "桃", "スイカ", "鰻", "アジ", "穴子", "ハモ"],
-            8: ["トマト", "きゅうり", "なす", "オクラ", "桃", "スイカ", "ぶどう", "鰹", "アジ", "太刀魚"],
-            9: ["さつまいも", "里芋", "栗", "松茸", "ぶどう", "梨", "柿", "秋刀魚", "鰹", "鮭"],
-            10: ["さつまいも", "里芋", "栗", "松茸", "柿", "りんご", "秋刀魚", "鮭", "鯖", "牡蠣"],
-            11: ["大根", "白菜", "春菊", "ほうれん草", "柿", "みかん", "りんご", "ブリ", "鯖", "牡蠣"],
-            12: ["白菜", "ネギ", "ほうれん草", "かぶ", "みかん", "ゆず", "鱈", "鰤", "牡蠣", "ふぐ"]
+            1: ["白菜", "ネギ", "小松菜", "大根", "みかん", "金柑", "鱈", "寒ブリ", "牡蠣"],
+            2: ["白菜", "ネギ", "ブロッコリー", "カリフラワー", "いちご", "鰆", "わかめ"],
+            3: ["菜の花", "春キャベツ", "新玉ねぎ", "アスパラガス", "いちご", "桜鯛", "ホタルイカ"],
+            4: ["筍", "新じゃがいも", "春キャベツ", "そら豆", "いちご", "初鰹", "桜えび"],
+            5: ["新玉ねぎ", "そら豆", "グリーンピース", "さくらんぼ", "メロン", "初鰹", "アジ"],
+            6: ["梅", "らっきょう", "新生姜", "ズッキーニ", "さくらんぼ", "アジ", "穴子"],
+            7: ["トマト", "きゅうり", "なす", "ピーマン", "桃", "スイカ", "鰻", "アジ"],
+            8: ["トマト", "きゅうり", "なす", "オクラ", "桃", "ぶどう", "鰹", "太刀魚"],
+            9: ["さつまいも", "里芋", "栗", "松茸", "ぶどう", "梨", "柿", "秋刀魚", "鮭"],
+            10: ["さつまいも", "里芋", "栗", "松茸", "柿", "りんご", "秋刀魚", "鮭", "鯖"],
+            11: ["大根", "白菜", "春菊", "ほうれん草", "柿", "みかん", "りんご", "ブリ", "牡蠣"],
+            12: ["白菜", "ネギ", "ほうれん草", "かぶ", "みかん", "ゆず", "鱈", "鰤", "ふぐ"]
         }
         
         # 季節の花（月ごと）
         seasonal_flowers = {
-            1: ("福寿草", "幸せを招く・永久の幸福", "新春を告げる黄金の花"),
-            2: ("梅", "高潔・忍耐・美", "早春に咲く香り高い花"),
-            3: ("桜", "精神の美・優美な女性", "日本の春を代表する花"),
-            4: ("藤", "歓迎・優しさ", "紫の花房が美しく垂れ下がる"),
-            5: ("牡丹", "富貴・高貴", "百花の王と呼ばれる豪華な花"),
-            6: ("紫陽花", "移り気・辛抱強い愛", "梅雨を彩る色変わりの花"),
-            7: ("朝顔", "はかない恋・愛情の絆", "夏の朝を飾る涼しげな花"),
-            8: ("向日葵", "憧れ・あなただけを見つめる", "太陽に向かって咲く夏の花"),
+            1: ("福寿草", "幸せを招く", "新春を告げる黄金の花"),
+            2: ("梅", "高潔・忍耐", "早春に咲く香り高い花"),
+            3: ("桜", "精神の美", "日本の春を代表する花"),
+            4: ("藤", "歓迎・優しさ", "紫の花房が美しい"),
+            5: ("牡丹", "富貴・高貴", "百花の王と呼ばれる花"),
+            6: ("紫陽花", "移り気", "梅雨を彩る色変わりの花"),
+            7: ("朝顔", "はかない恋", "夏の朝を飾る花"),
+            8: ("向日葵", "憧れ", "太陽に向かって咲く夏の花"),
             9: ("彼岸花", "再会・情熱", "秋の彼岸に咲く真紅の花"),
             10: ("コスモス", "調和・謙虚", "秋風に揺れる可憐な花"),
-            11: ("山茶花", "困難に打ち勝つ・ひたむきさ", "霜に負けずに咲く冬の花"),
+            11: ("山茶花", "困難に打ち勝つ", "霜に負けずに咲く冬の花"),
             12: ("水仙", "自己愛・神秘", "清楚な香りの冬の花")
         }
         
@@ -286,48 +285,100 @@ class CalendarGenerator:
             7: "文月", 8: "葉月", 9: "長月", 10: "神無月", 11: "霜月", 12: "師走"
         }
         
-        html_content = f"""
+        # HTML生成（絵文字を使わない）
+        html_content = """
 <div style="font-family: 'Hiragino Sans', 'Yu Gothic', sans-serif; line-height: 1.8; color: #333;">
 
-<h2 style="color: #4a5568; border-left: 4px solid #5a67d8; padding-left: 12px;">📅 今日の暦情報</h2>
+<h2 style="color: #4a5568; border-left: 4px solid #5a67d8; padding-left: 12px;">今日の暦情報</h2>
 
 <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 10px; margin: 20px 0; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-<p style="margin: 0; font-size: 20px;"><strong>西暦:</strong> {self.target_date.year}年{self.target_date.month}月{self.target_date.day}日（{weekday}曜日）</p>
-<p style="margin: 10px 0 0 0; font-size: 17px;"><strong>旧暦:</strong> {lunar['lunar_month']}月{lunar['lunar_day']}日 <span style="opacity: 0.9;">（{lunar_month_names.get(lunar['lunar_month'], '')}）</span></p>
-<p style="margin: 10px 0 0 0; font-size: 17px;"><strong>月齢:</strong> {lunar['moon_age']} <span style="opacity: 0.9;">（{lunar['moon_name']}）</span></p>
-<p style="margin: 10px 0 0 0; font-size: 15px; opacity: 0.95;">🌙 {lunar['moon_description']}</p>
+<p style="margin: 0; font-size: 20px;"><strong>西暦:</strong> {year}年{month}月{day}日（{weekday}曜日）</p>
+<p style="margin: 10px 0 0 0; font-size: 17px;"><strong>旧暦:</strong> {lunar_month}月{lunar_day}日 <span style="opacity: 0.9;">（{lunar_month_name}）</span></p>
+<p style="margin: 10px 0 0 0; font-size: 17px;"><strong>月齢:</strong> {moon_age} <span style="opacity: 0.9;">（{moon_name}）</span></p>
+<p style="margin: 10px 0 0 0; font-size: 15px; opacity: 0.95;">{moon_desc}</p>
 </div>
 
 <div style="background-color: #f7fafc; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 3px solid #4299e1;">
-<p style="margin: 0; color: #2d3748;">旧暦{lunar['lunar_month']}月は<strong>「{lunar_month_names.get(lunar['lunar_month'], '')}」</strong>。{lunar['moon_name']}の頃は、{lunar['moon_description']}が見られる季節です。</p>
+<p style="margin: 0; color: #2d3748;">旧暦{lunar_month}月は<strong>「{lunar_month_name}」</strong>。{moon_name}の頃は、{moon_desc}が見られる季節です。</p>
 </div>
 
 <hr style="border: none; border-top: 2px solid #e2e8f0; margin: 30px 0;">
 
-<h3 style="color: #2d3748; font-size: 22px;">🌸 季節の花</h3>
+<h3 style="color: #2d3748; font-size: 22px;">季節の移ろい</h3>
+
+<div style="border-left: 4px solid #f6ad55; padding-left: 15px; margin: 20px 0; background: linear-gradient(to right, #fef5e7, transparent); padding: 15px;">
+<h4 style="color: #dd6b20; margin-top: 0; font-size: 18px;">二十四節気: {sekki_name}</h4>
+<p style="margin: 5px 0 0 0; color: #2d3748;">{sekki_desc}</p>
+</div>
+
+<div style="border-left: 4px solid #48bb78; padding-left: 15px; margin: 20px 0; background: linear-gradient(to right, #f0fff4, transparent); padding: 15px;">
+<h4 style="color: #2f855a; margin-top: 0; font-size: 18px;">七十二候: {kou_name}</h4>
+<p style="margin: 5px 0; color: #2d3748;"><em>読み:</em> {kou_reading}</p>
+<p style="margin: 5px 0 0 0; color: #2d3748;">{kou_desc}</p>
+</div>
+
+<hr style="border: none; border-top: 2px solid #e2e8f0; margin: 30px 0;">
+
+<h3 style="color: #2d3748; font-size: 22px;">旬の食材</h3>
+
+<div style="background: linear-gradient(135deg, #fef5e7 0%, #fef3c7 100%); padding: 20px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+<p style="margin: 0 0 10px 0; font-size: 16px;"><strong>今が旬の食材:</strong></p>
+<p style="margin: 0; font-size: 15px; color: #744210;">{foods}</p>
+<p style="margin: 15px 0 0 0; font-size: 14px; color: #92400e;">季節の恵みをいただき、自然のリズムを感じましょう。</p>
+</div>
+
+<hr style="border: none; border-top: 2px solid #e2e8f0; margin: 30px 0;">
+
+<h3 style="color: #2d3748; font-size: 22px;">季節の花</h3>
 
 <div style="background: linear-gradient(135deg, #ffeef8 0%, #ffe4f3 100%); padding: 20px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-<p style="margin: 0; font-size: 18px; font-weight: bold; color: #831843;">🌺 {seasonal['flower'][0]}</p>
-<p style="margin: 10px 0 5px 0; color: #9f1239;"><em>花言葉:</em> <strong>{seasonal['flower'][1]}</strong></p>
-<p style="margin: 5px 0 0 0; font-size: 14px; color: #be185d;">{seasonal['flower'][2]}</p>
+<p style="margin: 0; font-size: 18px; font-weight: bold; color: #831843;">{flower_name}</p>
+<p style="margin: 10px 0 5px 0; color: #9f1239;"><em>花言葉:</em> <strong>{flower_meaning}</strong></p>
+<p style="margin: 5px 0 0 0; font-size: 14px; color: #be185d;">{flower_desc}</p>
 </div>
 
 <hr style="border: none; border-top: 2px solid #e2e8f0; margin: 30px 0;">
 
 <div style="background: linear-gradient(135deg, #ebf8ff 0%, #dbeafe 100%); padding: 20px; border-radius: 10px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
 <p style="margin: 0; font-size: 15px; color: #1e40af; font-weight: 500;">
-🍃 季節を感じながら、今日も良い一日をお過ごしください 🍃
+季節を感じながら、今日も良い一日をお過ごしください
 </p>
 <p style="margin: 10px 0 0 0; font-size: 13px; color: #3b82f6;">
-自動投稿システムにより生成 • {self.target_date.strftime('%Y年%m月%d日')}
+自動投稿システムにより生成 - {date_str}
 </p>
 </div>
 
 </div>
-"""
+""".format(
+            year=self.target_date.year,
+            month=self.target_date.month,
+            day=self.target_date.day,
+            weekday=weekday,
+            lunar_month=lunar['lunar_month'],
+            lunar_day=lunar['lunar_day'],
+            lunar_month_name=lunar_month_names.get(lunar['lunar_month'], ''),
+            moon_age=lunar['moon_age'],
+            moon_name=lunar['moon_name'],
+            moon_desc=lunar['moon_description'],
+            sekki_name=sekki_kou['sekki'][0],
+            sekki_desc=sekki_kou['sekki'][1],
+            kou_name=sekki_kou['kou'][0],
+            kou_reading=sekki_kou['kou'][1],
+            kou_desc=sekki_kou['kou'][2],
+            foods=", ".join(seasonal['foods'][:8]),
+            flower_name=seasonal['flower'][0],
+            flower_meaning=seasonal['flower'][1],
+            flower_desc=seasonal['flower'][2],
+            date_str=self.target_date.strftime('%Y年%m月%d日')
+        )
         
         return {
-            'title': f'📅 {self.target_date.year}年{self.target_date.month}月{self.target_date.day}日({weekday})の暦情報',
+            'title': '{}年{}月{}日({})の暦情報'.format(
+                self.target_date.year,
+                self.target_date.month,
+                self.target_date.day,
+                weekday
+            ),
             'content': html_content,
             'labels': ['暦', '二十四節気', '旧暦', '季節', '七十二候']
         }
@@ -378,11 +429,11 @@ class BloggerPoster:
             request = self.service.posts().insert(blogId=blog_id, body=post)
             response = request.execute()
             
-            print(f"✅ 投稿成功: {response.get('url')}")
+            print("投稿成功: {}".format(response.get('url')))
             return response
             
         except Exception as e:
-            print(f"❌ 投稿エラー: {str(e)}")
+            print("投稿エラー: {}".format(str(e)))
             raise
 
 
@@ -394,62 +445,31 @@ def main():
         if not blog_id:
             raise Exception("BLOG_ID環境変数が設定されていません")
         
-        print("🌸 暦情報自動投稿システム起動")
-        print(f"📅 投稿日時: {datetime.now(ZoneInfo('Asia/Tokyo')).strftime('%Y年%m月%d日 %H:%M:%S')}")
+        print("暦情報自動投稿システム起動")
+        print("投稿日時: {}".format(datetime.now(ZoneInfo('Asia/Tokyo')).strftime('%Y年%m月%d日 %H:%M:%S')))
         
         # 暦情報を生成（今日の日付で自動生成）
-        print("\n📝 今日の暦情報を生成中...")
+        print("\n今日の暦情報を生成中...")
         generator = CalendarGenerator()
         post_data = generator.generate_content()
         
-        print(f"   タイトル: {post_data['title']}")
+        print("   タイトル: {}".format(post_data['title']))
         
         # Bloggerに投稿
-        print("\n📤 Bloggerに投稿中...")
+        print("\nBloggerに投稿中...")
         poster = BloggerPoster()
         poster.authenticate()
         poster.post_to_blog(blog_id, post_data['title'], post_data['content'], post_data['labels'])
         
-        print("\n✨ すべての処理が完了しました！")
-        print("   365日毎日違う内容が自動で投稿されます 🎉")
+        print("\nすべての処理が完了しました！")
+        print("365日毎日違う内容が自動で投稿されます")
         
     except Exception as e:
-        print(f"\n💥 エラーが発生しました: {str(e)}")
+        print("\nエラーが発生しました: {}".format(str(e)))
         import traceback
         traceback.print_exc()
         sys.exit(1)
 
 
 if __name__ == '__main__':
-    # セットアップモードのチェック
-    if '--setup' in sys.argv:
-        print("🔧 初回セットアップモード")
-        print("ブラウザが開きます。Googleアカウントでログインしてください。")
-        # セットアップ処理（ローカル環境用）
-    else:
-        main()
-
-<h3 style="color: #2d3748; font-size: 22px;">☀️ 季節の移ろい</h3>
-
-<div style="border-left: 4px solid #f6ad55; padding-left: 15px; margin: 20px 0; background: linear-gradient(to right, #fef5e7, transparent); padding: 15px;">
-<h4 style="color: #dd6b20; margin-top: 0; font-size: 18px;">二十四節気: {sekki_kou['sekki'][0]}</h4>
-<p style="margin: 5px 0 0 0; color: #2d3748;">{sekki_kou['sekki'][1]}。自然の大きな変化を感じる時期です。</p>
-</div>
-
-<div style="border-left: 4px solid #48bb78; padding-left: 15px; margin: 20px 0; background: linear-gradient(to right, #f0fff4, transparent); padding: 15px;">
-<h4 style="color: #2f855a; margin-top: 0; font-size: 18px;">七十二候: {sekki_kou['kou'][0]}</h4>
-<p style="margin: 5px 0; color: #2d3748;"><em>読み:</em> {sekki_kou['kou'][1]}</p>
-<p style="margin: 5px 0 0 0; color: #2d3748;">{sekki_kou['kou'][2]}。季節の微細な変化が感じられます。</p>
-</div>
-
-<hr style="border: none; border-top: 2px solid #e2e8f0; margin: 30px 0;">
-
-<h3 style="color: #2d3748; font-size: 22px;">🍴 旬の食材</h3>
-
-<div style="background: linear-gradient(135deg, #fef5e7 0%, #fef3c7 100%); padding: 20px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-<p style="margin: 0 0 10px 0; font-size: 16px;"><strong>今が旬の食材:</strong></p>
-<p style="margin: 0; font-size: 15px; color: #744210;">{", ".join(seasonal['foods'][:8])}</p>
-<p style="margin: 15px 0 0 0; font-size: 14px; color: #92400e;">季節の恵みをいただき、自然のリズムを感じましょう。</p>
-</div>
-
-<hr style="border: none; border-top: 2px solid #e2e8f0; margin: 30px 0;">
+    main()
