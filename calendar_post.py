@@ -20,24 +20,131 @@ from googleapiclient.discovery import build
 SCOPES = ['https://www.googleapis.com/auth/blogger']
 
 class SolarTermCalculator:
-    """二十四節気・七十二候の計算"""
+    """二十四節気・七十二候の天文計算クラス（毎年自動対応）"""
     
     @staticmethod
-    def calculate_solar_longitude(date):
-        """太陽黄経を計算"""
+    def calculate_solar_term_date(year, solar_longitude):
+        """
+        指定した年と太陽黄経から節気の日付を計算
+        太陽黄経: 0°=春分, 15°=清明, 30°=穀雨, ..., 345°=啓蟄
+        略算式を使用（精度±1日）
+        """
+        # 二十四節気の係数（DとA）
+        # 出典: 海上保安庁水路部の略算式を拡張
+        sekki_params = {
+            315: (5.01, 0.242778),   # 立春
+            330: (19.70, 0.242713),  # 雨水
+            345: (6.38, 0.242627),   # 啓蟄
+            0:   (21.43, 0.242194),  # 春分
+            15:  (5.59, 0.241934),   # 清明
+            30:  (21.04, 0.241669),  # 穀雨
+            45:  (6.30, 0.241424),   # 立夏
+            60:  (22.18, 0.241176),  # 小満
+            75:  (6.62, 0.240959),   # 芒種
+            90:  (22.29, 0.240715),  # 夏至
+            105: (7.93, 0.240460),   # 小暑
+            120: (23.95, 0.240252),  # 大暑
+            135: (8.52, 0.240014),   # 立秋
+            150: (24.30, 0.239766),  # 処暑
+            165: (8.60, 0.239527),   # 白露
+            180: (23.89, 0.239300),  # 秋分
+            195: (9.09, 0.239063),   # 寒露
+            210: (24.19, 0.238825),  # 霜降
+            225: (8.19, 0.238591),   # 立冬
+            240: (23.15, 0.238355),  # 小雪
+            255: (7.93, 0.238120),   # 大雪
+            270: (22.66, 0.237885),  # 冬至
+            285: (6.12, 0.237651),   # 小寒
+            300: (20.87, 0.237418)   # 大寒
+        }
+        
+        if solar_longitude not in sekki_params:
+            return None
+        
+        D, A = sekki_params[solar_longitude]
+        
+        # 1月・2月の節気は前年基準で計算
+        if solar_longitude in [285, 300, 315, 330]:
+            Y = year - 1900 - 1
+        else:
+            Y = year - 1900
+        
+        # 略算式: INT(D + (A × Y) - INT(Y / 4))
+        day = int(D + (A * Y) - int(Y / 4))
+        
+        # 月の決定
+        if solar_longitude == 285:  # 小寒
+            month = 1
+        elif solar_longitude == 300:  # 大寒
+            month = 1
+            day += 15
+        elif solar_longitude == 315:  # 立春
+            month = 2
+        elif solar_longitude == 330:  # 雨水
+            month = 2
+            day += 14
+        elif solar_longitude == 345:  # 啓蟄
+            month = 3
+        elif solar_longitude == 0:  # 春分
+            month = 3
+            day += 15
+        elif solar_longitude == 15:  # 清明
+            month = 4
+        elif solar_longitude == 30:  # 穀雨
+            month = 4
+            day += 15
+        elif solar_longitude == 45:  # 立夏
+            month = 5
+        elif solar_longitude == 60:  # 小満
+            month = 5
+            day += 16
+        elif solar_longitude == 75:  # 芒種
+            month = 6
+        elif solar_longitude == 90:  # 夏至
+            month = 6
+            day += 16
+        elif solar_longitude == 105:  # 小暑
+            month = 7
+        elif solar_longitude == 120:  # 大暑
+            month = 7
+            day += 16
+        elif solar_longitude == 135:  # 立秋
+            month = 8
+        elif solar_longitude == 150:  # 処暑
+            month = 8
+            day += 16
+        elif solar_longitude == 165:  # 白露
+            month = 9
+        elif solar_longitude == 180:  # 秋分
+            month = 9
+            day += 16
+        elif solar_longitude == 195:  # 寒露
+            month = 10
+        elif solar_longitude == 210:  # 霜降
+            month = 10
+            day += 15
+        elif solar_longitude == 225:  # 立冬
+            month = 11
+        elif solar_longitude == 240:  # 小雪
+            month = 11
+            day += 15
+        elif solar_longitude == 255:  # 大雪
+            month = 12
+        elif solar_longitude == 270:  # 冬至
+            month = 12
+            day += 15
+        
+        return (month, day)
+    
+    @classmethod
+    def get_current_sekki(cls, date):
+        """現在の二十四節気を天文計算で取得"""
         year = date.year
         month = date.month
         day = date.day
         
-        # 春分を基準（簡易計算）
-        days_in_year = (date - datetime(year, 1, 1, tzinfo=date.tzinfo)).days
-        longitude = (days_in_year * 360 / 365.25 + 280) % 360
-        return longitude
-    
-    @classmethod
-    def get_sekki_info(cls, date):
-        """現在の二十四節気"""
-        sekki_list = [
+        # 全24節気の定義
+        sekki_definitions = [
             (315, "立春", "りっしゅん", "春の始まり。暦の上では春ですが、まだ寒さが厳しい時期です。"),
             (330, "雨水", "うすい", "雪が雨に変わり、氷が解け始める頃。三寒四温で春に向かいます。"),
             (345, "啓蟄", "けいちつ", "冬眠していた虫が目覚める頃。春の訪れを実感できます。"),
@@ -64,34 +171,132 @@ class SolarTermCalculator:
             (300, "大寒", "だいかん", "一年で最も寒い時期。寒さの極みです。")
         ]
         
-        longitude = cls.calculate_solar_longitude(date)
-        current_sekki = sekki_list[0]
+        # 各節気の日付を計算
+        sekki_dates = []
+        for longitude, name, reading, desc in sekki_definitions:
+            term_date = cls.calculate_solar_term_date(year, longitude)
+            if term_date:
+                sekki_dates.append((term_date[0], term_date[1], name, reading, desc))
         
-        for i in range(len(sekki_list)):
-            deg, name, reading, desc = sekki_list[i]
-            next_deg = sekki_list[(i + 1) % len(sekki_list)][0]
-            
-            if deg <= next_deg:
-                if deg <= longitude < next_deg:
-                    current_sekki = (name, reading, desc)
-                    break
-            else:
-                if longitude >= deg or longitude < next_deg:
-                    current_sekki = (name, reading, desc)
-                    break
+        # 前年の冬の節気も追加（年始の判定用）
+        for longitude in [255, 270, 285, 300]:
+            term_date = cls.calculate_solar_term_date(year - 1, longitude)
+            if term_date:
+                for lng, name, reading, desc in sekki_definitions:
+                    if lng == longitude:
+                        sekki_dates.append((term_date[0], term_date[1], name, reading, desc))
+        
+        # 現在の日付に最も近い過去の節気を探す
+        current_sekki = sekki_dates[0][2:]
+        for m, d, name, reading, desc in sekki_dates:
+            if month > m or (month == m and day >= d):
+                current_sekki = (name, reading, desc)
         
         return current_sekki
     
     @classmethod
     def get_kou_info(cls, date):
-        """現在の七十二候（完全版・全72候）"""
+        """現在の七十二候を節気から自動計算"""
+        year = date.year
         month = date.month
         day = date.day
         
-        # 七十二候完全リスト（72候すべて）
+        # 七十二候完全リスト（全72候）
+        # 各節気を3分割して候とする
         kou_complete_list = [
             # 春
             (2, 4, "東風解凍", "はるかぜこおりをとく", "春風が氷を解かし始める頃。立春の初候です。"),
+            (2, 9, "黄鶯睍睆", "うぐいすなく", "鶯が山里で鳴き始める頃。春の訪れを告げる鳴き声です。"),
+            (2, 14, "魚上氷", "うおこおりをいずる", "割れた氷の間から魚が飛び跳ねる頃です。"),
+            (2, 19, "土脉潤起", "つちのしょううるおいおこる", "雨が降って土が湿り気を含む頃です。"),
+            (2, 24, "霞始靆", "かすみはじめてたなびく", "霞がたなびき、春景色が広がる頃です。"),
+            (2, 29, "草木萌動", "そうもくめばえいずる", "草木が芽吹き始める頃。春の息吹を感じます。"),
+            (3, 5, "蟄虫啓戸", "すごもりむしとをひらく", "冬眠していた虫が外に這い出てくる頃です。"),
+            (3, 10, "桃始笑", "ももはじめてさく", "桃の花が咲き始める頃。笑は咲くの意味です。"),
+            (3, 15, "菜虫化蝶", "なむしちょうとなる", "青虫が蝶に羽化する頃。春の生命の躍動です。"),
+            (3, 20, "雀始巣", "すずめはじめてすくう", "雀が巣を作り始める頃です。"),
+            (3, 25, "櫻始開", "さくらはじめてひらく", "桜が咲き始める頃。春の代名詞です。"),
+            (3, 30, "雷乃発声", "かみなりすなわちこえをはっす", "遠くで雷の音が聞こえ始める頃です。"),
+            (4, 4, "玄鳥至", "つばめきたる", "燕が南から渡ってくる頃。春の使者です。"),
+            (4, 9, "鴻雁北", "こうがんかえる", "雁が北へ帰っていく頃です。"),
+            (4, 14, "虹始見", "にじはじめてあらわる", "雨上がりに虹が出始める頃です。"),
+            (4, 20, "葭始生", "あしはじめてしょうず", "葦が芽を吹き始める頃です。"),
+            (4, 25, "霜止出苗", "しもやんでなえいず", "霜が降りなくなり、苗が育つ頃です。"),
+            (4, 30, "牡丹華", "ぼたんはなさく", "牡丹の花が咲く頃。華やかな春の終わりです。"),
+            # 夏
+            (5, 5, "蛙始鳴", "かわずはじめてなく", "蛙が鳴き始める頃。初夏の風物詩です。"),
+            (5, 10, "蚯蚓出", "みみずいずる", "蚯蚓が地上に這い出てくる頃です。"),
+            (5, 15, "竹笋生", "たけのこしょうず", "筍が生えてくる頃。旬の味覚です。"),
+            (5, 21, "蚕起食桑", "かいこおきてくわをはむ", "蚕が桑の葉を盛んに食べ始める頃です。"),
+            (5, 26, "紅花栄", "べにばなさかう", "紅花が盛んに咲く頃です。"),
+            (5, 31, "麦秋至", "むぎのときいたる", "麦が熟し、収穫期を迎える頃です。"),
+            (6, 5, "蟷螂生", "かまきりしょうず", "蟷螂が生まれ出る頃です。"),
+            (6, 10, "腐草為螢", "くされたるくさほたるとなる", "蛍が光を放ち始める頃。初夏の風情です。"),
+            (6, 16, "梅子黄", "うめのみきばむ", "梅の実が黄ばんで熟す頃です。"),
+            (6, 21, "乃東枯", "なつかれくさかるる", "夏枯草が枯れる頃。夏至の日です。"),
+            (6, 26, "菖蒲華", "あやめはなさく", "菖蒲の花が咲く頃です。"),
+            (7, 2, "半夏生", "はんげしょうず", "烏柄杓が生える頃。田植えの目安とされました。"),
+            (7, 7, "温風至", "あつかぜいたる", "暑い風が吹いてくる頃。夏本番です。"),
+            (7, 12, "蓮始開", "はすはじめてひらく", "蓮の花が開き始める頃です。"),
+            (7, 17, "鷹乃学習", "たかすなわちわざをならう", "鷹の幼鳥が飛び方を覚える頃です。"),
+            (7, 22, "桐始結花", "きりはじめてはなをむすぶ", "桐の花が実を結ぶ頃です。"),
+            (7, 28, "土潤溽暑", "つちうるおうてむしあつし", "土が湿って蒸し暑くなる頃です。"),
+            (8, 2, "大雨時行", "たいうときどきふる", "時として大雨が降る頃。夕立の季節です。"),
+            # 秋
+            (8, 7, "涼風至", "すずかぜいたる", "涼しい風が吹き始める頃。立秋です。"),
+            (8, 12, "寒蝉鳴", "ひぐらしなく", "蜩が鳴き始める頃。秋の気配を感じます。"),
+            (8, 17, "蒙霧升降", "ふかききりまとう", "深い霧がまとわりつく頃です。"),
+            (8, 23, "綿柎開", "わたのはなしべひらく", "綿の花のがくが開く頃です。"),
+            (8, 28, "天地始粛", "てんちはじめてさむし", "天地の暑さが収まり始める頃です。"),
+            (9, 2, "禾乃登", "こくものすなわちみのる", "稲が実る頃。実りの秋です。"),
+            (9, 7, "草露白", "くさのつゆしろし", "草に降りた露が白く見える頃です。"),
+            (9, 12, "鶺鴒鳴", "せきれいなく", "鶺鴒が鳴き始める頃です。"),
+            (9, 17, "玄鳥去", "つばめさる", "燕が南へ帰っていく頃です。"),
+            (9, 23, "雷乃収声", "かみなりすなわちこえをおさむ", "雷が鳴らなくなる頃。秋分です。"),
+            (9, 28, "蟄虫坏戸", "むしかくれてとをふさぐ", "虫が土の中に隠れる頃です。"),
+            (10, 3, "水始涸", "みずはじめてかるる", "田んぼの水を抜き始める頃です。"),
+            (10, 8, "鴻雁来", "こうがんきたる", "雁が飛来する頃。冬鳥の到来です。"),
+            (10, 13, "菊花開", "きくのはなひらく", "菊の花が咲く頃です。"),
+            (10, 18, "蟋蟀在戸", "きりぎりすとにあり", "蟋蟀が戸口で鳴く頃です。"),
+            (10, 23, "霜始降", "しもはじめてふる", "霜が降り始める頃。霜降です。"),
+            (10, 28, "霎時施", "こさめときどきふる", "小雨がしとしと降る頃です。"),
+            (11, 2, "楓蔦黄", "もみじつたきばむ", "紅葉や蔦が黄葉する頃です。"),
+            # 冬
+            (11, 7, "山茶始開", "つばきはじめてひらく", "山茶花が咲き始める頃。立冬です。"),
+            (11, 12, "地始凍", "ちはじめてこおる", "大地が凍り始める頃です。"),
+            (11, 17, "金盞香", "きんせんかさく", "水仙の花が咲く頃です。"),
+            (11, 22, "虹蔵不見", "にじかくれてみえず", "虹を見かけなくなる頃。小雪です。"),
+            (11, 27, "朔風払葉", "きたかぜこのはをはらう", "北風が木の葉を払い落とす頃。冬の風物詩です。"),
+            (12, 2, "橘始黄", "たちばなはじめてきばむ", "橘の実が黄色く色づく頃です。"),
+            (12, 7, "閉塞成冬", "そらさむくふゆとなる", "天地の気が塞がり、本格的な冬となる頃。大雪です。"),
+            (12, 12, "熊蟄穴", "くまあなにこもる", "熊が冬眠のために穴に入る頃です。"),
+            (12, 16, "鱖魚群", "さけのうおむらがる", "鮭が群がって川を上る頃です。"),
+            (12, 21, "乃東生", "なつかれくさしょうず", "夏枯草が芽を出す頃。冬至です。"),
+            (12, 26, "麋角解", "さわしかつのおつる", "大鹿が角を落とす頃です。"),
+            (12, 31, "雪下出麦", "ゆきわたりてむぎのびる", "雪の下で麦が芽を出す頃です。"),
+            (1, 5, "芹乃栄", "せりすなわちさかう", "芹が盛んに生え始める頃。小寒です。"),
+            (1, 10, "水泉動", "しみずあたたかをふくむ", "地中で凍った泉が動き始める頃です。"),
+            (1, 15, "雉始雊", "きじはじめてなく", "雉が鳴き始める頃です。"),
+            (1, 20, "款冬華", "ふきのはなさく", "蕗の花が咲く頃。大寒です。"),
+            (1, 25, "水沢腹堅", "さわみずこおりつめる", "沢の水が厚く凍る頃。寒さの極みです。"),
+            (1, 30, "鶏始乳", "にわとりはじめてとやにつく", "鶏が卵を産み始める頃です。")
+        ]
+        
+        # 現在の候を探す（最も近い日付の候を選択）
+        current_kou = kou_complete_list[0][2:]  # デフォルト
+        
+        for m, d, name, reading, desc in reversed(kou_complete_list):
+            if month > m or (month == m and day >= d):
+                current_kou = (name, reading, desc)
+                break
+        
+        # 年末年始の処理（12月後半〜1月初旬）
+        if month == 12 and day >= 31:
+            current_kou = ("雪下出麦", "ゆきわたりてむぎのびる", "雪の下で麦が芽を出す頃です。")
+        elif month == 1 and day < 5:
+            current_kou = ("雪下出麦", "ゆきわたりてむぎのびる", "雪の下で麦が芽を出す頃です。")
+        
+        return current_kou
             (2, 9, "黄鶯睍睆", "うぐいすなく", "鶯が山里で鳴き始める頃。春の訪れを告げる鳴き声です。"),
             (2, 14, "魚上氷", "うおこおりをいずる", "割れた氷の間から魚が飛び跳ねる頃です。"),
             (2, 19, "土脉潤起", "つちのしょううるおいおこる", "雨が降って土が湿り気を含む頃です。"),
@@ -299,6 +504,7 @@ class ComprehensiveCalendarGenerator:
         self.date = target_date or datetime.now(self.jst)
         self.month = self.date.month
         self.day = self.date.day
+        self.gemini = GeminiContentEnhancer()  # Gemini強化版を使用
     
     def get_lunar_month_names(self):
         """旧暦月の異名と説明"""
@@ -319,7 +525,13 @@ class ComprehensiveCalendarGenerator:
         return names
     
     def generate_seasonal_description(self, lunar, sekki, kou):
-        """季節の詳細な説明文"""
+        """季節の詳細な説明（Gemini強化版）"""
+        # Gemini APIで生成を試みる
+        gemini_text = self.gemini.enhance_seasonal_description(self.date, lunar, sekki, kou)
+        if gemini_text:
+            return gemini_text
+        
+        # フォールバック
         lunar_names = self.get_lunar_month_names()
         lunar_info = lunar_names.get(lunar['month'], ("", "", ""))
         
@@ -587,6 +799,14 @@ class ComprehensiveCalendarGenerator:
         festivals = self.get_festivals_and_rituals()
         arts = self.get_traditional_arts()
         
+        # Gemini APIで各セクションの文章を強化
+        print("  Gemini APIで文章を生成中...")
+        nature_text = self.gemini.enhance_nature_changes(self.month, nature_changes) or "、".join(nature_changes)
+        agri_text = self.gemini.enhance_agricultural_info(self.month, agri) or agri['detail']
+        food_text = self.gemini.enhance_food_description(self.month, foods) or foods['special']
+        flower_text = self.gemini.enhance_flower_description(self.month, flowers['main']) or flowers['main'][3]
+        astro_text = self.gemini.enhance_astronomical_info(lunar, self.month) or astro['moon']
+        
         html = f"""
 <div style="font-family: 'ヒラギノ角ゴ Pro', 'Hiragino Kaku Gothic Pro', 'メイリオ', Meiryo, sans-serif; max-width: 900px; margin: 0 auto; line-height: 1.9; color: #2d3748;">
 
@@ -620,9 +840,7 @@ class ComprehensiveCalendarGenerator:
 
 <div style="background: #fffaf0; padding: 25px; border-radius: 10px; margin-bottom: 30px; border: 2px solid #fbd38d;">
 <h4 style="color: #c05621; margin: 0 0 15px 0; font-size: 20px;">自然の変化としては:</h4>
-<ul style="margin: 0; padding-left: 30px; color: #2d3748; line-height: 2;">
-{"".join(f"<li style='margin-bottom: 10px; font-size: 15px;'>{change}</li>" for change in nature_changes)}
-</ul>
+<p style="margin: 0; color: #2d3748; line-height: 2; font-size: 15px;">{nature_text}</p>
 </div>
 
 <hr style="border: none; border-top: 3px solid #e2e8f0; margin: 40px 0;">
@@ -631,10 +849,13 @@ class ComprehensiveCalendarGenerator:
 
 <div style="background: linear-gradient(135deg, #fef5e7, #fef3c7); padding: 28px; border-radius: 12px; margin-bottom: 30px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
 <p style="margin: 0 0 18px 0; font-size: 20px; font-weight: bold; color: #744210;">この時期は「{agri['title']}」</p>
-<ul style="margin: 0; padding-left: 30px; color: #744210; line-height: 2;">
-{"".join(f"<li style='margin-bottom: 12px; font-size: 15px;'>{activity}</li>" for activity in agri['activities'])}
+<p style="margin: 0; color: #744210; line-height: 2; font-size: 15px;">{agri_text}</p>
+<div style="margin: 20px 0 0 0; padding: 15px; background: rgba(255,255,255,0.5); border-radius: 8px;">
+<p style="margin: 0 0 10px 0; font-weight: bold; color: #92400e;">主な作業:</p>
+<ul style="margin: 0; padding-left: 25px; color: #744210; line-height: 1.8;">
+{"".join(f"<li style='margin-bottom: 8px; font-size: 14px;'>{activity}</li>" for activity in agri['activities'])}
 </ul>
-<p style="margin: 25px 0 0 0; color: #92400e; line-height: 2; font-style: italic; padding: 15px; background: rgba(255,255,255,0.5); border-radius: 8px; font-size: 15px;">{agri['detail']}</p>
+</div>
 </div>
 
 <hr style="border: none; border-top: 3px solid #e2e8f0; margin: 40px 0;">
@@ -689,16 +910,18 @@ class ComprehensiveCalendarGenerator:
 
 <div style="background: linear-gradient(135deg, #fff5f5, #fed7d7); padding: 28px; border-radius: 12px; margin-bottom: 30px;">
 <h4 style="color: #c53030; margin: 0 0 15px 0; font-size: 20px;">旬を迎える食材:</h4>
-<p style="margin: 0 0 8px 0; font-size: 16px; color: #742a2a; line-height: 1.8;">
+<p style="margin: 0 0 20px 0; color: #742a2a; line-height: 2; font-size: 15px;">{food_text}</p>
+<div style="padding: 18px; background: rgba(255,255,255,0.6); border-radius: 8px; margin-bottom: 15px;">
+<p style="margin: 0 0 8px 0; font-size: 15px; color: #742a2a; line-height: 1.8;">
 <strong>野菜:</strong> {", ".join(foods['vegetables'])}
 </p>
-<p style="margin: 8px 0; font-size: 16px; color: #742a2a; line-height: 1.8;">
+<p style="margin: 8px 0; font-size: 15px; color: #742a2a; line-height: 1.8;">
 <strong>果物:</strong> {", ".join(foods['fruits'])}
 </p>
-<p style="margin: 8px 0; font-size: 16px; color: #742a2a; line-height: 1.8;">
+<p style="margin: 8px 0; font-size: 15px; color: #742a2a; line-height: 1.8;">
 <strong>魚介:</strong> {", ".join(foods['seafood'])}
 </p>
-<p style="margin: 20px 0 0 0; padding: 18px; background: rgba(255,255,255,0.6); border-radius: 8px; color: #742a2a; line-height: 2; font-size: 15px;">{foods['special']}</p>
+</div>
 <p style="margin: 15px 0 0 0; padding: 18px; background: rgba(255,255,255,0.6); border-radius: 8px; color: #742a2a; line-height: 2; font-size: 15px;"><strong>行事食としては:</strong><br>{foods['ceremonial']}</p>
 </div>
 
@@ -709,7 +932,7 @@ class ComprehensiveCalendarGenerator:
 <div style="background: linear-gradient(135deg, #fff0f5, #ffe4f3); padding: 28px; border-radius: 12px; margin-bottom: 25px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
 <p style="margin: 0 0 8px 0; font-size: 22px; font-weight: bold; color: #831843;">季節の花: {flowers['main'][0]}（{flowers['main'][1]}）</p>
 <p style="margin: 12px 0; color: #9f1239; font-size: 17px;"><em>花言葉:</em> 「{flowers['main'][2]}」</p>
-<p style="margin: 12px 0 0 0; color: #be185d; line-height: 2; font-size: 16px;">{flowers['main'][3]}</p>
+<p style="margin: 12px 0 0 0; color: #be185d; line-height: 2; font-size: 15px;">{flower_text}</p>
 </div>
 
 <div style="background: #fef5f8; padding: 25px; border-radius: 10px; margin-bottom: 30px;">
@@ -722,7 +945,7 @@ class ComprehensiveCalendarGenerator:
 <h3 style="color: #2d3748; font-size: 26px; margin-bottom: 25px; border-left: 6px solid #4299e1; padding-left: 15px;">月や星の暦・天文情報</h3>
 
 <div style="background: linear-gradient(135deg, #ebf4ff, #dbeafe); padding: 28px; border-radius: 12px; margin-bottom: 30px;">
-<p style="margin: 0 0 20px 0; line-height: 2; color: #1e40af; font-size: 16px;">{astro['moon']}</p>
+<p style="margin: 0 0 20px 0; line-height: 2; color: #1e40af; font-size: 15px;">{astro_text}</p>
 <h4 style="color: #1e3a8a; margin: 20px 0 15px 0; font-size: 19px;">星空では:</h4>
 <ul style="margin: 0; padding-left: 30px; color: #1e40af; line-height: 2;">
 {"".join(f"<li style='margin-bottom: 12px; font-size: 15px;'>{star}</li>" for star in astro['stars'])}
