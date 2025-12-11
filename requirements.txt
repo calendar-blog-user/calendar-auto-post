@@ -1,1 +1,6 @@
-google-api-python-clientgoogle-auth-httplib2google-auth-oauthlibgoogle-generativeaiephem
+google-auth-oauthlib==1.2.0
+google-auth-httplib2==0.2.0
+google-api-python-client==2.108.0
+requests==2.31.0
+pytz==2023.3
+tzdata==2023.3
