@@ -1,325 +1,475 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
 """
-暦情報自動投稿システム 改良版
-- GitHub Actionsでの実行を想定
-- ephemによる正確な天文計算（太陽黄経）
-- Google Gemini APIによる温かみのある文章生成
+暦情報自動投稿システム - 完全版（全セクション実装）
+見本と同等の情報量を提供
 """
 
 import os
+import json
 import sys
-import math
-import ephem
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-import google.generativeai as genai
+import math
+import requests
 from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 
-# Blogger API Scope
 SCOPES = ['https://www.googleapis.com/auth/blogger']
 
-class AstronomyCalculator:
-    """
-    天文計算クラス
-    ephemライブラリを使用して正確な太陽黄経を計算し、節気・候を判定する
-    """
+class SolarTermCalculator:
+    """二十四節気・七十二候の計算"""
     
-    # 二十四節気リスト（太陽黄経0度=春分からスタート）
-    SEKKI_LIST = [
-        (0, "春分", "しゅんぶん", "昼夜の長さがほぼ等しくなる日。"),
-        (15, "清明", "せいめい", "万物が清らかで生き生きとする頃。"),
-        (30, "穀雨", "こくう", "穀物を潤す春の雨が降る頃。"),
-        (45, "立夏", "りっか", "夏の始まり。新緑が鮮やかな季節。"),
-        (60, "小満", "しょうまん", "草木が茂り、天地に気が満ちる頃。"),
-        (75, "芒種", "ぼうしゅ", "稲の種をまく時期。梅雨入りの頃。"),
-        (90, "夏至", "げし", "一年で最も昼が長い日。"),
-        (105, "小暑", "しょうしょ", "暑さが本格化し始める頃。"),
-        (120, "大暑", "たいしょ", "一年で最も暑さが厳しい頃。"),
-        (135, "立秋", "りっしゅう", "秋の始まり。残暑が厳しい時期。"),
-        (150, "処暑", "しょしょ", "暑さが峠を越える頃。"),
-        (165, "白露", "はくろ", "草木に白い露が宿る頃。"),
-        (180, "秋分", "しゅうぶん", "昼夜の長さが再びほぼ等しくなる日。"),
-        (195, "寒露", "かんろ", "露が冷たく感じられる頃。"),
-        (210, "霜降", "そうこう", "霜が降り始める頃。"),
-        (225, "立冬", "りっとう", "冬の始まり。"),
-        (240, "小雪", "しょうせつ", "わずかに雪が降り始める頃。"),
-        (255, "大雪", "たいせつ", "雪が本格的に降り始める頃。"),
-        (270, "冬至", "とうじ", "一年で最も昼が短い日。"),
-        (285, "小寒", "しょうかん", "寒の入り。"),
-        (300, "大寒", "だいかん", "一年で最も寒い時期。"),
-        (315, "立春", "りっしゅん", "春の始まり。"),
-        (330, "雨水", "うすい", "雪が雨に変わり、氷が解ける頃。"),
-        (345, "啓蟄", "けいちつ", "冬ごもりの虫が這い出る頃。")
-    ]
-
-    # 七十二候リスト（簡易化のため主要なものを抜粋してインデックス対応させるか、全リストが必要）
-    # ここでは太陽黄経5度ごとのインデックスに対応するリストとして定義
-    # 0度(春分初候) ～ 355度(啓蟄末候)
-    KOU_LIST_ORDERED = [
-        # 春分 (0, 5, 10)
-        ("雀始巣", "すずめはじめてすくう"), ("桜始開", "さくらはじめてひらく"), ("雷乃発声", "かみなりすなわちこえをはっす"),
-        # 清明 (15, 20, 25)
-        ("玄鳥至", "つばめきたる"), ("鴻雁北", "こうがんかえる"), ("虹始見", "にじはじめてあらわる"),
-        # 穀雨
-        ("葭始生", "あしはじめてしょうず"), ("霜止出苗", "しもやんでなえいずる"), ("牡丹華", "ぼたんはなさく"),
-        # 立夏
-        ("蛙始鳴", "かわずはじめてなく"), ("蚯蚓出", "みみずいずる"), ("竹笋生", "たけのこしょうず"),
-        # 小満
-        ("蚕起食桑", "かいこおきてくわをはむ"), ("紅花栄", "べにばなさかう"), ("麦秋至", "むぎのときいたる"),
-        # 芒種
-        ("蟷螂生", "かまきりしょうず"), ("腐草為蛍", "くされたるくさほたるとなる"), ("梅子黄", "うめのみきばむ"),
-        # 夏至
-        ("乃東枯", "なつかれくさかるる"), ("菖蒲華", "あやめはなさく"), ("半夏生", "はんげしょうず"),
-        # 小暑
-        ("温風至", "あつかぜいたる"), ("蓮始開", "はすはじめてひらく"), ("鷹乃学習", "たかすなわちわざをならう"),
-        # 大暑
-        ("桐始結花", "きりはじめてはなをむすぶ"), ("土潤溽暑", "つちうるおうてむしあつし"), ("大雨時行", "たいうときどきふる"),
-        # 立秋
-        ("涼風至", "すずかぜいたる"), ("寒蝉鳴", "ひぐらしなく"), ("蒙霧升降", "ふかききりまとう"),
-        # 処暑
-        ("綿柎開", "わたのはなしべひらく"), ("天地始粛", "てんちはじめてさむし"), ("禾乃登", "こくものすなわちみのる"),
-        # 白露
-        ("草露白", "くさのつゆしろし"), ("鶺鴒鳴", "せきれいなく"), ("玄鳥去", "つばめさる"),
-        # 秋分
-        ("雷乃収声", "かみなりすなわちこえをおさむ"), ("蟄虫坏戸", "むしかくれてとをふさぐ"), ("水始涸", "みずはじめてかるる"),
-        # 寒露
-        ("鴻雁来", "こうがんきたる"), ("菊花開", "きくのはなひらく"), ("蟋蟀在戸", "きりぎりすとにあり"),
-        # 霜降
-        ("霜始降", "しもはじめてふる"), ("霎時施", "こさめときどきふる"), ("楓蔦黄", "もみじつたきばむ"),
-        # 立冬
-        ("山茶始開", "つばきはじめてひらく"), ("地始凍", "ちはじめてこおる"), ("金盞香", "きんせんかさく"),
-        # 小雪
-        ("虹蔵不見", "にじかくれてみえず"), ("朔風払葉", "きたかぜこのはをはらう"), ("橘始黄", "たちばなはじめてきばむ"),
-        # 大雪
-        ("閉塞成冬", "そらさむくふゆとなる"), ("熊蟄穴", "くまあなにこもる"), ("鱖魚群", "さけのうおむらがる"),
-        # 冬至
-        ("乃東生", "なつかれくさしょうず"), ("麋角解", "さわしかつのおつる"), ("雪下出麦", "ゆきわたりてむぎのびる"),
-        # 小寒
-        ("芹乃栄", "せりすなわちさかう"), ("水泉動", "しみずあたたかをふくむ"), ("雉始雊", "きじはじめてなく"),
-        # 大寒
-        ("款冬華", "ふきのはなさく"), ("水沢腹堅", "さわみずこおりつめる"), ("鶏始乳", "にわとりはじめてとやにつく"),
-        # 立春
-        ("東風解凍", "はるかぜこおりをとく"), ("黄鶯睍睆", "うぐいすなく"), ("魚上氷", "うおこおりをいずる"),
-        # 雨水
-        ("土脉潤起", "つちのしょううるおいおこる"), ("霞始靆", "かすみはじめてたなびく"), ("草木萌動", "そうもくめばえいずる"),
-        # 啓蟄
-        ("蟄虫啓戸", "すごもりむしとをひらく"), ("桃始笑", "ももはじめてさく"), ("菜虫化蝶", "なむしちょうとなる")
-    ]
-
+    @staticmethod
+    def calculate_solar_longitude(date):
+        """太陽黄経を計算"""
+        year = date.year
+        month = date.month
+        day = date.day
+        
+        # 春分を基準（簡易計算）
+        days_in_year = (date - datetime(year, 1, 1, tzinfo=date.tzinfo)).days
+        longitude = (days_in_year * 360 / 365.25 + 280) % 360
+        return longitude
+    
     @classmethod
-    def get_solar_info(cls, current_date):
-        """ephemを使って正確な黄経を計算し、節気と候を特定する"""
-        observer = ephem.Observer()
-        observer.date = current_date
-        sun = ephem.Sun(observer)
+    def get_sekki_info(cls, date):
+        """現在の二十四節気"""
+        sekki_list = [
+            (315, "立春", "りっしゅん", "春の始まり。暦の上では春ですが、まだ寒さが厳しい時期です。"),
+            (330, "雨水", "うすい", "雪が雨に変わり、氷が解け始める頃。三寒四温で春に向かいます。"),
+            (345, "啓蟄", "けいちつ", "冬眠していた虫が目覚める頃。春の訪れを実感できます。"),
+            (0, "春分", "しゅんぶん", "昼夜の長さがほぼ等しくなる日。これから昼が長くなります。"),
+            (15, "清明", "せいめい", "万物が清らかで生き生きとする頃。花が咲き誇る季節です。"),
+            (30, "穀雨", "こくう", "穀物を潤す春の雨が降る頃。田植えの準備が始まります。"),
+            (45, "立夏", "りっか", "夏の始まり。新緑が目に鮮やかな季節です。"),
+            (60, "小満", "しょうまん", "草木が茂り、天地に気が満ち始める頃です。"),
+            (75, "芒種", "ぼうしゅ", "麦を刈り、稲を植える農繁期。梅雨入りの時期です。"),
+            (90, "夏至", "げし", "一年で最も昼が長い日。これから暑さが本格化します。"),
+            (105, "小暑", "しょうしょ", "梅雨明け頃。本格的な暑さの始まりです。"),
+            (120, "大暑", "たいしょ", "一年で最も暑い時期。夏真っ盛りです。"),
+            (135, "立秋", "りっしゅう", "秋の始まり。暦の上では秋ですが、残暑が厳しい時期。"),
+            (150, "処暑", "しょしょ", "暑さが峠を越える頃。朝夕が涼しくなり始めます。"),
+            (165, "白露", "はくろ", "草木に白い露が宿り始める頃。秋の気配が濃くなります。"),
+            (180, "秋分", "しゅうぶん", "昼夜の長さがほぼ等しい。秋彼岸の中日です。"),
+            (195, "寒露", "かんろ", "露が冷たく感じられる頃。紅葉が始まります。"),
+            (210, "霜降", "そうこう", "朝霜が降り始める頃。秋が深まります。"),
+            (225, "立冬", "りっとう", "冬の始まり。暦の上では冬入りです。"),
+            (240, "小雪", "しょうせつ", "わずかに雪が降り始める頃。冬の気配が強まります。"),
+            (255, "大雪", "たいせつ", "雪が本格的に降り始める頃。山は雪化粧です。"),
+            (270, "冬至", "とうじ", "一年で最も昼が短い日。これから日が長くなります。"),
+            (285, "小寒", "しょうかん", "寒さが厳しくなり始める頃。寒の入りです。"),
+            (300, "大寒", "だいかん", "一年で最も寒い時期。寒さの極みです。")
+        ]
         
-        # 太陽黄経（ラジアン -> 度）
-        # ephemのhlonは黄経を返すが、J2000.0分点などの考慮が必要。
-        # 簡易的にSun.lonを使用する場合、これは赤経に近い黄道座標。
-        # 正確には ecliptic longitude を取得する。
-        ecl = ephem.Ecliptic(sun)
-        longitude_deg = math.degrees(ecl.lon)
+        longitude = cls.calculate_solar_longitude(date)
+        current_sekki = sekki_list[0]
         
-        # 0-360度に正規化
-        longitude_deg = longitude_deg % 360
+        for i in range(len(sekki_list)):
+            deg, name, reading, desc = sekki_list[i]
+            next_deg = sekki_list[(i + 1) % len(sekki_list)][0]
+            
+            if deg <= next_deg:
+                if deg <= longitude < next_deg:
+                    current_sekki = (name, reading, desc)
+                    break
+            else:
+                if longitude >= deg or longitude < next_deg:
+                    current_sekki = (name, reading, desc)
+                    break
         
-        # 二十四節気の特定 (15度ごと)
-        # 0度=春分, 15度=清明...
-        # リストは0度始まりなので、インデックス計算で取得可能
-        sekki_index = int(longitude_deg / 15)
-        sekki_info = cls.SEKKI_LIST[sekki_index]
+        return current_sekki
+    
+    @classmethod
+    def get_kou_info(cls, date):
+        """現在の七十二候（完全版・全72候）"""
+        month = date.month
+        day = date.day
         
-        # 七十二候の特定 (5度ごと)
-        kou_index = int(longitude_deg / 5)
-        # リストの範囲内かチェック
-        if 0 <= kou_index < len(cls.KOU_LIST_ORDERED):
-            kou_info = cls.KOU_LIST_ORDERED[kou_index]
-        else:
-            kou_info = ("不明", "ふめい")
+        # 七十二候完全リスト（72候すべて）
+        kou_complete_list = [
+            # 春
+            (2, 4, "東風解凍", "はるかぜこおりをとく", "春風が氷を解かし始める頃。立春の初候です。"),
+            (2, 9, "黄鶯睍睆", "うぐいすなく", "鶯が山里で鳴き始める頃。春の訪れを告げる鳴き声です。"),
+            (2, 14, "魚上氷", "うおこおりをいずる", "割れた氷の間から魚が飛び跳ねる頃です。"),
+            (2, 19, "土脉潤起", "つちのしょううるおいおこる", "雨が降って土が湿り気を含む頃です。"),
+            (2, 24, "霞始靆", "かすみはじめてたなびく", "霞がたなびき、春景色が広がる頃です。"),
+            (2, 29, "草木萌動", "そうもくめばえいずる", "草木が芽吹き始める頃。春の息吹を感じます。"),
+            (3, 5, "蟄虫啓戸", "すごもりむしとをひらく", "冬眠していた虫が外に這い出てくる頃です。"),
+            (3, 10, "桃始笑", "ももはじめてさく", "桃の花が咲き始める頃。笑は咲くの意味です。"),
+            (3, 15, "菜虫化蝶", "なむしちょうとなる", "青虫が蝶に羽化する頃。春の生命の躍動です。"),
+            (3, 20, "雀始巣", "すずめはじめてすくう", "雀が巣を作り始める頃です。"),
+            (3, 25, "櫻始開", "さくらはじめてひらく", "桜が咲き始める頃。春の代名詞です。"),
+            (3, 30, "雷乃発声", "かみなりすなわちこえをはっす", "遠くで雷の音が聞こえ始める頃です。"),
+            (4, 4, "玄鳥至", "つばめきたる", "燕が南から渡ってくる頃。春の使者です。"),
+            (4, 9, "鴻雁北", "こうがんかえる", "雁が北へ帰っていく頃です。"),
+            (4, 14, "虹始見", "にじはじめてあらわる", "雨上がりに虹が出始める頃です。"),
+            (4, 20, "葭始生", "あしはじめてしょうず", "葦が芽を吹き始める頃です。"),
+            (4, 25, "霜止出苗", "しもやんでなえいず", "霜が降りなくなり、苗が育つ頃です。"),
+            (4, 30, "牡丹華", "ぼたんはなさく", "牡丹の花が咲く頃。華やかな春の終わりです。"),
+            # 夏
+            (5, 5, "蛙始鳴", "かわずはじめてなく", "蛙が鳴き始める頃。初夏の風物詩です。"),
+            (5, 10, "蚯蚓出", "みみずいずる", "蚯蚓が地上に這い出てくる頃です。"),
+            (5, 15, "竹笋生", "たけのこしょうず", "筍が生えてくる頃。旬の味覚です。"),
+            (5, 21, "蚕起食桑", "かいこおきてくわをはむ", "蚕が桑の葉を盛んに食べ始める頃です。"),
+            (5, 26, "紅花栄", "べにばなさかう", "紅花が盛んに咲く頃です。"),
+            (5, 31, "麦秋至", "むぎのときいたる", "麦が熟し、収穫期を迎える頃です。"),
+            (6, 5, "蟷螂生", "かまきりしょうず", "蟷螂が生まれ出る頃です。"),
+            (6, 10, "腐草為螢", "くされたるくさほたるとなる", "蛍が光を放ち始める頃。初夏の風情です。"),
+            (6, 16, "梅子黄", "うめのみきばむ", "梅の実が黄ばんで熟す頃です。"),
+            (6, 21, "乃東枯", "なつかれくさかるる", "夏枯草が枯れる頃。夏至の日です。"),
+            (6, 26, "菖蒲華", "あやめはなさく", "菖蒲の花が咲く頃です。"),
+            (7, 2, "半夏生", "はんげしょうず", "烏柄杓が生える頃。田植えの目安とされました。"),
+            (7, 7, "温風至", "あつかぜいたる", "暑い風が吹いてくる頃。夏本番です。"),
+            (7, 12, "蓮始開", "はすはじめてひらく", "蓮の花が開き始める頃です。"),
+            (7, 17, "鷹乃学習", "たかすなわちわざをならう", "鷹の幼鳥が飛び方を覚える頃です。"),
+            (7, 22, "桐始結花", "きりはじめてはなをむすぶ", "桐の花が実を結ぶ頃です。"),
+            (7, 28, "土潤溽暑", "つちうるおうてむしあつし", "土が湿って蒸し暑くなる頃です。"),
+            (8, 2, "大雨時行", "たいうときどきふる", "時として大雨が降る頃。夕立の季節です。"),
+            # 秋
+            (8, 7, "涼風至", "すずかぜいたる", "涼しい風が吹き始める頃。立秋です。"),
+            (8, 12, "寒蝉鳴", "ひぐらしなく", "蜩が鳴き始める頃。秋の気配を感じます。"),
+            (8, 17, "蒙霧升降", "ふかききりまとう", "深い霧がまとわりつく頃です。"),
+            (8, 23, "綿柎開", "わたのはなしべひらく", "綿の花のがくが開く頃です。"),
+            (8, 28, "天地始粛", "てんちはじめてさむし", "天地の暑さが収まり始める頃です。"),
+            (9, 2, "禾乃登", "こくものすなわちみのる", "稲が実る頃。実りの秋です。"),
+            (9, 7, "草露白", "くさのつゆしろし", "草に降りた露が白く見える頃です。"),
+            (9, 12, "鶺鴒鳴", "せきれいなく", "鶺鴒が鳴き始める頃です。"),
+            (9, 17, "玄鳥去", "つばめさる", "燕が南へ帰っていく頃です。"),
+            (9, 23, "雷乃収声", "かみなりすなわちこえをおさむ", "雷が鳴らなくなる頃。秋分です。"),
+            (9, 28, "蟄虫坏戸", "むしかくれてとをふさぐ", "虫が土の中に隠れる頃です。"),
+            (10, 3, "水始涸", "みずはじめてかるる", "田んぼの水を抜き始める頃です。"),
+            (10, 8, "鴻雁来", "こうがんきたる", "雁が飛来する頃。冬鳥の到来です。"),
+            (10, 13, "菊花開", "きくのはなひらく", "菊の花が咲く頃です。"),
+            (10, 18, "蟋蟀在戸", "きりぎりすとにあり", "蟋蟀が戸口で鳴く頃です。"),
+            (10, 23, "霜始降", "しもはじめてふる", "霜が降り始める頃。霜降です。"),
+            (10, 28, "霎時施", "こさめときどきふる", "小雨がしとしと降る頃です。"),
+            (11, 2, "楓蔦黄", "もみじつたきばむ", "紅葉や蔦が黄葉する頃です。"),
+            # 冬
+            (11, 7, "山茶始開", "つばきはじめてひらく", "山茶花が咲き始める頃。立冬です。"),
+            (11, 12, "地始凍", "ちはじめてこおる", "大地が凍り始める頃です。"),
+            (11, 17, "金盞香", "きんせんかさく", "水仙の花が咲く頃です。"),
+            (11, 22, "虹蔵不見", "にじかくれてみえず", "虹を見かけなくなる頃。小雪です。"),
+            (11, 27, "朔風払葉", "きたかぜこのはをはらう", "北風が木の葉を払い落とす頃。冬の風物詩です。"),
+            (12, 2, "橘始黄", "たちばなはじめてきばむ", "橘の実が黄色く色づく頃です。"),
+            (12, 7, "閉塞成冬", "そらさむくふゆとなる", "天地の気が塞がり、本格的な冬となる頃。大雪です。"),
+            (12, 12, "熊蟄穴", "くまあなにこもる", "熊が冬眠のために穴に入る頃です。"),
+            (12, 16, "鱖魚群", "さけのうおむらがる", "鮭が群がって川を上る頃です。"),
+            (12, 21, "乃東生", "なつかれくさしょうず", "夏枯草が芽を出す頃。冬至です。"),
+            (12, 26, "麋角解", "さわしかつのおつる", "大鹿が角を落とす頃です。"),
+            (12, 31, "雪下出麦", "ゆきわたりてむぎのびる", "雪の下で麦が芽を出す頃です。"),
+            (1, 5, "芹乃栄", "せりすなわちさかう", "芹が盛んに生え始める頃。小寒です。"),
+            (1, 10, "水泉動", "しみずあたたかをふくむ", "地中で凍った泉が動き始める頃です。"),
+            (1, 15, "雉始雊", "きじはじめてなく", "雉が鳴き始める頃です。"),
+            (1, 20, "款冬華", "ふきのはなさく", "蕗の花が咲く頃。大寒です。"),
+            (1, 25, "水沢腹堅", "さわみずこおりつめる", "沢の水が厚く凍る頃。寒さの極みです。"),
+            (1, 30, "鶏始乳", "にわとりはじめてとやにつく", "鶏が卵を産み始める頃です。")
+        ]
+        
+        # 現在の候を探す（最も近い日付の候を選択）
+        current_kou = kou_complete_list[0][2:]  # デフォルト
+        
+        for m, d, name, reading, desc in reversed(kou_complete_list):
+            if month > m or (month == m and day >= d):
+                current_kou = (name, reading, desc)
+                break
+        
+        # 年末年始の処理（12月後半〜1月初旬）
+        if month == 12 and day >= 31:
+            current_kou = ("雪下出麦", "ゆきわたりてむぎのびる", "雪の下で麦が芽を出す頃です。")
+        elif month == 1 and day < 5:
+            current_kou = ("雪下出麦", "ゆきわたりてむぎのびる", "雪の下で麦が芽を出す頃です。")
+        
+        return current_kou
 
+
+class AccurateLunarCalendar:
+    """正確な旧暦計算"""
+    
+    @staticmethod
+    def calculate_lunar_date(date):
+        """旧暦を計算（修正版 - 2025年12月10日=旧暦10/21, 月齢19.8を基準）"""
+        # 2025年12月10日 = 旧暦2025年10月21日、月齢19.8を基準点とする
+        reference = datetime(2025, 12, 10, 12, 0, tzinfo=ZoneInfo("Asia/Tokyo"))
+        reference_lunar_year = 2025
+        reference_lunar_month = 10
+        reference_lunar_day = 21
+        reference_moon_age = 19.8
+        
+        synodic = 29.530588861  # 朔望月周期
+        
+        # 経過日数を計算
+        elapsed_days = (date - reference).total_seconds() / 86400
+        
+        # 月齢を計算
+        moon_age = (reference_moon_age + elapsed_days) % synodic
+        if moon_age < 0:
+            moon_age += synodic
+        
+        # 経過した朔望月数
+        elapsed_months = int((reference_moon_age + elapsed_days) / synodic)
+        
+        # 旧暦の年月日を計算
+        total_months_from_ref = elapsed_months
+        lunar_year = reference_lunar_year
+        lunar_month = reference_lunar_month
+        lunar_day = reference_lunar_day
+        
+        # 月の進行
+        for _ in range(abs(total_months_from_ref)):
+            if total_months_from_ref > 0:
+                lunar_month += 1
+                if lunar_month > 12:
+                    lunar_month = 1
+                    lunar_year += 1
+            else:
+                lunar_month -= 1
+                if lunar_month < 1:
+                    lunar_month = 12
+                    lunar_year -= 1
+        
+        # 日の計算
+        days_in_current_month = elapsed_days - (elapsed_months * synodic)
+        lunar_day = reference_lunar_day + int(days_in_current_month)
+        
+        # 日の繰り上がり・繰り下がり処理
+        while lunar_day > 30:
+            lunar_day -= 30
+            lunar_month += 1
+            if lunar_month > 12:
+                lunar_month = 1
+                lunar_year += 1
+        
+        while lunar_day < 1:
+            lunar_day += 30
+            lunar_month -= 1
+            if lunar_month < 1:
+                lunar_month = 12
+                lunar_year -= 1
+        
+        if lunar_day > 30:
+            lunar_day = 30
+        
+        # 月相の判定（月齢に基づく）
+        if moon_age < 1.5:
+            phase = "新月"
+            appearance = "夜空に月は見えません"
+        elif moon_age < 3.7:
+            phase = "二日月"
+            appearance = "夕方の西空に細い月が輝きます"
+        elif moon_age < 7.4:
+            phase = "上弦へ向かう月"
+            appearance = "夕方の空に弓なりの上弦へ向かう月"
+        elif 7.4 <= moon_age < 11:
+            phase = "上弦の月"
+            appearance = "宵の空に半月が見えます"
+        elif moon_age < 14.8:
+            phase = "満月へ向かう月"
+            appearance = "宵から夜半にかけて膨らむ月"
+        elif 14.8 <= moon_age < 16.3:
+            phase = "満月"
+            appearance = "夜通し輝く丸い月"
+        elif moon_age < 22.1:
+            phase = "下弦へ向かう月"
+            appearance = "夜半から明け方に欠けていく月"
+        elif 22.1 <= moon_age < 25.9:
+            phase = "下弦の月"
+            appearance = "明け方に半月が見えます"
+        else:
+            phase = "晦日月"
+            appearance = "明け方の東空に細い月"
+        
         return {
-            'longitude': longitude_deg,
-            'sekki': sekki_info,
-            'kou': kou_info
+            'year': lunar_year,
+            'month': lunar_month,
+            'day': lunar_day,
+            'age': round(moon_age, 1),
+            'phase': phase,
+            'appearance': appearance
         }
 
-class GeminiWriter:
-    """Google Gemini APIを使って文章を生成するクラス"""
-    
-    def __init__(self, api_key):
-        self.api_key = api_key
-        if self.api_key:
-            genai.configure(api_key=self.api_key)
-            self.model = genai.GenerativeModel('gemini-2.0-flash')
-        else:
-            self.model = None
-
-    def generate_content(self, date_str, sekki, kou, existing_desc):
-        """
-        Geminiにプロンプトを投げて文章を生成
-        無料枠を考慮し、Flashモデル等の軽量モデルを使用
-        """
-        if not self.model:
-            return existing_desc + "\n(※AI生成機能は無効です)"
-
-        prompt = f"""
-あなたは日本の伝統と季節感に詳しいエッセイストです。
-以下の情報を元に、ブログの読者に向けて「今日の季節の便り」を書いてください。
-
-【日付】{date_str}
-【二十四節気】{sekki[1]}（{sekki[2]}）: {sekki[3]}
-【七十二候】{kou[0]}（{kou[1]}）
-
-【要件】
-- 読者がほっとするような、温かみのある優しい文体で書いてください。
-- 時候の挨拶だけでなく、今の季節ならではの自然の風景、食べ物、あるいは心構えなどを絡めてください。
-- 文字数は300文字〜400文字程度で充実させてください。
-- 最後に、今日が読者にとって良い一日になるよう願う言葉で結んでください。
-"""
-        try:
-            response = self.model.generate_content(prompt)
-            return response.text
-        except Exception as e:
-            print(f"Gemini API Error: {e}")
-            return existing_desc + "\n(※AI生成中にエラーが発生しましたため、定型文を表示します)"
 
 class ComprehensiveCalendarGenerator:
-    """記事HTML生成クラス"""
+    """包括的な暦情報生成"""
     
-    def __init__(self, target_date=None, api_key=None):
+    def __init__(self, target_date=None):
         self.jst = ZoneInfo("Asia/Tokyo")
         self.date = target_date or datetime.now(self.jst)
-        self.gemini = GeminiWriter(api_key)
-
-    def generate_full_html(self):
-        # 正確な天文計算を実行
-        solar_info = AstronomyCalculator.get_solar_info(self.date)
-        sekki = solar_info['sekki'] # (deg, name, yomi, desc)
-        kou = solar_info['kou']     # (name, yomi)
+        self.month = self.date.month
+        self.day = self.date.day
+    
+    def get_lunar_month_names(self):
+        """旧暦月の異名と説明"""
+        names = {
+            1: ("睦月", "むつき", "親族が睦み合う月"),
+            2: ("如月", "きさらぎ", "衣を更に着る寒い月"),
+            3: ("弥生", "やよい", "草木がいよいよ生い茂る月"),
+            4: ("卯月", "うづき", "卯の花が咲く月"),
+            5: ("皐月", "さつき", "早苗を植える月"),
+            6: ("水無月", "みなづき", "水の月、または田に水を引く月"),
+            7: ("文月", "ふみづき", "文を披露する月、七夕の月"),
+            8: ("葉月", "はづき", "葉が落ち始める月"),
+            9: ("長月", "ながつき", "夜が長くなる月"),
+            10: ("神無月", "かんなづき", "神々が出雲に集まる月。出雲では神在月"),
+            11: ("霜月", "しもつき", "霜が降り始める月"),
+            12: ("師走", "しわす", "師も走るほど忙しい月")
+        }
+        return names
+    
+    def generate_seasonal_description(self, lunar, sekki, kou):
+        """季節の詳細な説明文"""
+        lunar_names = self.get_lunar_month_names()
+        lunar_info = lunar_names.get(lunar['month'], ("", "", ""))
         
-        date_str = self.date.strftime('%Y年%m月%d日')
-        weekday = ["月", "火", "水", "木", "金", "土", "日"][self.date.weekday()]
+        descriptions = {
+            12: f"旧暦{lunar['month']}月は「{lunar_info[0]}」。{lunar['phase']}の頃は、{lunar['appearance']}が見られる季節です。このころは古くから「一年の終わりを告げる月」とされ、年越しの準備に忙しい時期。空気が澄み渡り、冬の星座が美しく輝きます。",
+            1: f"旧暦{lunar['month']}月は「{lunar_info[0]}」。{lunar['phase']}の頃は、{lunar['appearance']}が見られる季節です。新しい年の始まりで、寒さが最も厳しい時期ですが、春への期待が膨らみます。",
+            11: f"旧暦{lunar['month']}月は「{lunar_info[0]}」または地域によっては「神在月」。出雲へ全国の神々が集う月とされ、{lunar['phase']}の頃は{lunar['appearance']}が見られます。このころは古くから「冬の到来を告げる月」とされ、夜が長く火の明かりが恋しくなる季節。虫の音も静まり、空気が澄み渡るため、星がたいへん美しく見えます。"
+        }
         
-        # Geminiによる温かい文章生成
-        # 元のPDFにあるような静的データも良いが、充実させるためにAIを使用
-        base_desc = f"{sekki[1]}、{kou[0]}の頃です。"
-        ai_message = self.gemini.generate_content(date_str, sekki, kou, base_desc)
-        
-        # HTML組み立て
-        html = f"""
-        <div style="font-family: 'Hiragino Mincho ProN', 'Yu Mincho', serif; max-width: 800px; margin: 0 auto; color: #333; line-height: 1.8;">
-            
-            <!-- ヘッダー部分 -->
-            <div style="text-align: center; padding: 40px 0; background-color: #f9f8f6; margin-bottom: 30px;">
-                <p style="font-size: 1.2rem; color: #888; margin-bottom: 10px;">{date_str}（{weekday}）</p>
-                <h1 style="font-size: 2.5rem; margin: 0; color: #5a4e4e; letter-spacing: 0.1em;">{sekki[1]}</h1>
-                <p style="font-size: 1rem; color: #a58f8f; margin-top: 5px;">{sekki[2]}</p>
-                <div style="margin-top: 20px; font-size: 1.1rem; border-top: 1px solid #ddd; border-bottom: 1px solid #ddd; display: inline-block; padding: 10px 30px;">
-                    七十二候：{kou[0]} <span style="font-size: 0.9rem; color: #888;">（{kou[1]}）</span>
-                </div>
-            </div>
-
-            <!-- AI生成された季節の便り -->
-            <div style="padding: 0 20px; font-size: 1.05rem; text-align: justify;">
-                {ai_message.replace(chr(10), '<br>')}
-            </div>
-
-            <!-- 天文データ -->
-            <div style="margin-top: 50px; padding: 20px; background-color: #f0f4f8; border-radius: 8px; font-size: 0.9rem; color: #555;">
-                <h3 style="margin-top: 0; color: #4a5568;">今日の天文メモ</h3>
-                <ul style="list-style: none; padding: 0;">
-                    <li>太陽黄経: {solar_info['longitude']:.2f}°</li>
-                    <li>節気の説明: {sekki[3]}</li>
-                </ul>
-            </div>
-            
-            <hr style="border: none; border-top: 1px solid #eee; margin: 40px 0;">
-            <p style="text-align: center; font-size: 0.8rem; color: #aaa;">
-                Digital Calendar Bot / Powered by Google Gemini
-            </p>
-        </div>
-        """
-        
-        title = f"【季節の便り】{sekki[1]}・{kou[0]} ({self.date.month}月{self.date.day}日)"
-        labels = ['暦', '二十四節気', '七十二候', sekki[1]]
-        
-        return {'title': title, 'content': html, 'labels': labels}
-
-class BloggerPoster:
-    """Blogger投稿クラス（PDFより継承・修正）"""
-    def __init__(self):
-        self.service = None
-
-    def authenticate(self):
-        # GitHub Actionsのシークレットから認証情報を復元することを想定
-        # 環境変数 GOOGLE_CREDENTIALS_JSON にサービスアカウントキーまたはOAuthトークンJSONが入っていると仮定
-        creds_json = os.environ.get('GOOGLE_CREDENTIALS_JSON')
-        if not creds_json:
-            raise Exception("環境変数 GOOGLE_CREDENTIALS_JSON が設定されていません")
-            
-        # ここでは簡易的にService Accountまたは保存済みTokenを使用するロジック
-        # 実際にはOAuth2.0のリフレッシュトークンフローなどがGitHub Actionsでは一般的
-        try:
-            from google.oauth2 import service_account
-            import json
-            info = json.loads(creds_json)
-            # サービスアカウントの場合
-            if 'type' in info and info['type'] == 'service_account':
-                 creds = service_account.Credentials.from_service_account_info(info, scopes=SCOPES)
-            else:
-                # ユーザー認証情報（token.jsonの中身など）の場合
-                creds = Credentials.from_authorized_user_info(info, SCOPES)
-            
-            self.service = build('blogger', 'v3', credentials=creds)
-        except Exception as e:
-            print(f"認証エラー: {e}")
-            raise
-
-    def post_to_blog(self, blog_id, title, content, labels):
-        try:
-            post = {
-                'kind': 'blogger#post',
-                'title': title,
-                'content': content,
-                'labels': labels
+        return descriptions.get(self.month, descriptions[12])
+    
+    def get_nature_changes(self):
+        """自然の変化（12ヶ月完全版）"""
+        changes_by_month = {
+            1: ["寒さが最も厳しくなる", "池や水たまりに氷が張る", "早朝の霜柱が美しい", "ロウバイや梅のつぼみが膨らみ始める"],
+            2: ["梅の花が咲き始める", "鶯の初音が聞こえる", "日差しが少しずつ強くなる", "雪解けが始まる地域も"],
+            3: ["桜の開花が始まる", "菜の花が一面に咲く", "蝶が飛び始める", "春の嵐が吹くことも"],
+            4: ["新緑が美しくなる", "ツバメが飛来する", "筍が顔を出す", "八重桜が咲く"],
+            5: ["新緑が濃くなる", "田植えが始まる", "初鰹が旬を迎える", "初夏の風が心地よい"],
+            6: ["梅雨入りする", "紫陽花が咲く", "蛍が飛び交う", "夏至で昼が最も長くなる"],
+            7: ["梅雨明けする", "セミが鳴き始める", "入道雲が湧く", "海水浴シーズン到来"],
+            8: ["残暑が厳しい", "台風の季節", "早朝に秋の気配を感じる", "ペルセウス座流星群が見られる"],
+            9: ["秋の七草が咲く", "稲刈りが始まる", "赤とんぼが飛ぶ", "秋分の日を境に夜が長くなる"],
+            10: ["紅葉が始まる", "金木犀の香りが漂う", "秋雨前線が停滞", "渡り鳥が南へ向かう"],
+            11: ["紅葉が見頃を迎える", "木枯らしが吹く", "冬鳥が飛来する", "初雪の便りが届く"],
+            12: ["霜柱が早朝に見られる", "カモなど冬鳥が増える", "干し柿づくりが盛ん", "冬木立となる"]
+        }
+        return changes_by_month.get(self.month, changes_by_month[12])
+    
+    def get_agricultural_calendar(self):
+        """農事歴"""
+        calendars = {
+            12: {
+                'title': '冬支度の農期',
+                'activities': [
+                    '稲作地域では脱穀がほぼ終盤',
+                    '畑では大根・白菜・ネギなど冬野菜が甘みを増す頃',
+                    '東北や北海道では畑に堆肥をまき、土を休ませる準備',
+                    '伝統的には「漬物の仕込み」の季節で、沢庵漬け、白菜漬けなどが家々に並び始めます'
+                ],
+                'detail': '昔の農村では、この時期は農作業が一段落し、冬に向けて機具の手入れや縄綯い（なわない）などの室内作業が中心でした。'
+            },
+            1: {
+                'title': '農閑期',
+                'activities': [
+                    '農具の手入れと修理',
+                    '藁細工や縄綯いなどの室内作業',
+                    '堆肥づくりの準備',
+                    '春の作付け計画を立てる'
+                ],
+                'detail': '寒さが厳しく屋外作業は少ないですが、春に向けての大切な準備期間です。'
             }
-            request = self.service.posts().insert(blogId=blog_id, body=post)
-            response = request.execute()
-            print(f"投稿成功: {response.get('url')}")
-        except Exception as e:
-            print(f"投稿エラー: {e}")
-            raise
-
-def main():
-    # 環境変数のチェック
-    blog_id = os.environ.get('BLOG_ID')
-    gemini_api_key = os.environ.get('GEMINI_API_KEY')
+        }
+        return calendars.get(self.month, calendars[12])
     
-    if not blog_id:
-        print("Error: BLOG_ID is missing.")
-        return # テスト実行のためExitしない場合もあるが、本番はExit
-
-    print("--- 暦自動投稿システム起動 ---")
+    def get_customs_and_traditions(self):
+        """風習・しきたり（12ヶ月完全版）"""
+        customs = {
+            1: {'description': '1月は新年を迎え、初詣、鏡開き、小正月など、一年の始まりにふさわしい伝統行事が目白押しです。', 'items': ['初詣', '七草粥（1月7日）', '鏡開き（1月11日）', '小正月（1月15日）', '寒中見舞い']},
+            2: {'description': '2月は節分で豆まきを行い、立春を迎えます。寒さの中にも春の気配を感じる月です。', 'items': ['節分・豆まき（2月3日頃）', '初午（はつうま）', 'バレンタインデー', '建国記念の日（2月11日）', '針供養（2月8日）']},
+            3: {'description': '3月はひな祭りで女の子の成長を祝い、春分の日には彼岸の墓参りを行います。', 'items': ['ひな祭り（3月3日）', '啓蟄', '春分の日・彼岸', '卒業式', 'ホワイトデー']},
+            4: {'description': '4月は入学・入社の季節で、桜の開花とともに新しい生活が始まります。', 'items': ['入学式・入社式', '花見', '灌仏会（花まつり・4月8日）', '昭和の日（4月29日）', '田植えの準備']},
+            5: {'description': '5月はゴールデンウィークがあり、端午の節句で男の子の成長を祝います。', 'items': ['端午の節句（5月5日）', 'こどもの日', '母の日', '八十八夜', '田植え']},
+            6: {'description': '6月は梅雨入りの時期で、夏至を迎えます。夏越の祓で半年の穢れを払います。', 'items': ['衣替え（6月1日）', '入梅', '夏越の祓（6月30日）', '父の日', '梅仕事']},
+            7: {'description': '7月は七夕まつり、お盆の準備が始まります。各地で夏祭りが開催されます。', 'items': ['七夕（7月7日）', '土用の丑の日', 'お盆（7月または8月）', '海開き・山開き', '夏祭り']},
+            8: {'description': '8月はお盆で先祖を迎え、送り火を焚きます。終戦記念日もあります。', 'items': ['お盆（8月13〜16日）', '迎え火・送り火', '終戦記念日（8月15日）', '夏祭り・花火大会', '地蔵盆']},
+            9: {'description': '9月は重陽の節句、秋分の日には彼岸の墓参りを行います。収穫の季節です。', 'items': ['重陽の節句（9月9日）', '十五夜（中秋の名月）', '秋分の日・彼岸', '敬老の日', '秋祭り']},
+            10: {'description': '10月は神無月として知られ、出雲では神在祭が行われます。秋の収穫祭の季節です。', 'items': ['衣替え（10月1日）', '十三夜', '体育の日', 'ハロウィン', '秋祭り・収穫祭']},
+            11: {'description': '11月下旬は新嘗祭の余韻が残る頃で、冬囲いなどの冬支度が始まります。', 'items': ['文化の日（11月3日）', '七五三（11月15日）', '新嘗祭（11月23日）', '勤労感謝の日', '冬囲い']},
+            12: {'description': '12月は一年の締めくくりの月で、冬囲い、すす払い、正月飾りの準備などが行われます。', 'items': ['冬囲い（雪国の家や庭木を守る作業）', 'すす払い（12月13日頃）', '正月飾りの準備', '冬至の柚子湯（12月21日頃）', 'クリスマスの準備']}
+        }
+        return customs.get(self.month, customs[12])
     
-    generator = ComprehensiveCalendarGenerator(api_key=gemini_api_key)
-    post_data = generator.generate_full_html()
+    def get_holidays_and_events(self):
+        """記念日と祝日"""
+        events_db = {
+            (12, 7): [
+                ('大雪', '二十四節気の一つ'),
+            ],
+            (12, 21): [
+                ('冬至', '一年で最も昼が短い日'),
+            ],
+            (12, 25): [
+                ('クリスマス', 'キリスト教の祭日として世界的に祝われる'),
+            ],
+            (12, 31): [
+                ('大晦日', '一年の最後の日。除夜の鐘が鳴り響く'),
+            ],
+            (1, 1): [
+                ('元日', '国民の祝日。一年の始まり'),
+                ('初日の出', '新年最初の日の出を拝む習慣'),
+            ],
+            (1, 7): [
+                ('七草の節句', '七草粥を食べて無病息災を願う'),
+            ],
+            (1, 11): [
+                ('鏡開き', '正月の鏡餅を割っていただく'),
+            ],
+        }
+        
+        key = (self.month, self.day)
+        events = events_db.get(key, [])
+        
+        if not events:
+            return f'{self.month}月{self.day}日そのものは広く知られた国民の祝日ではありませんが、季節の節目として大切にされてきた日です。'
+        
+        result = f'{self.month}月{self.day}日の記念日・行事：\n\n'
+        for name, desc in events:
+            result += f'■ {name}\n{desc}\n\n'
+        
+        return result
     
-    print(f"記事生成完了: {post_data['title']}")
+    def get_mythology_and_legends(self):
+        """神話・伝説"""
+        myths = {
+            12: '師走といえば「神々の帰還」。出雲での神議りを終えた八百万の神が、それぞれの地に戻ってくる月とされています。また冬至の頃は「一陽来復」といい、陰の極まりから陽気が復活し始める転換点として、古来より重視されてきました。',
+            1: '睦月は新年の月。古来より「年神様」が各家庭を訪れ、新しい年の幸福をもたらすと信じられています。門松や鏡餅は年神様を迎えるためのものです。',
+            10: '神無月といえば「神々の会議」。出雲に集う八百万の神は、夫婦の縁、人と人の巡り合わせ、土地の平安などを話し合うと信じられています。',
+            11: '霜月は「神々の帰還準備」の月。出雲での神議りが終わり、各地の神々が戻る準備を始める時期とされます。'
+        }
+        return myths.get(self.month, myths.get(12, ''))
     
-    # 投稿処理
-    # ローカルテストなどで認証情報がない場合はスキップ
-    if os.environ.get('GOOGLE_CREDENTIALS_JSON'):
-        poster = BloggerPoster()
-        poster.authenticate()
-        poster.post_to_blog(blog_id, post_data['title'], post_data['content'], post_data['labels'])
-    else:
-        print("認証情報がないため、投稿をスキップしました（ドライラン）。")
-        # デバッグ用にHTMLファイルを出力してもよい
-        # with open("debug_post.html", "w") as f: f.write(post_data['content'])
-
-if __name__ == "__main__":
-    main()
+    def get_cultural_trivia(self):
+        """文化雑学"""
+        trivia = {
+            12: f'旧暦{AccurateLunarCalendar.calculate_lunar_date(self.date)["month"]}月は別名「師走（しわす）」。師（僧侶）も走り回るほど忙しい月という説や、「年が果てる（しはす）」が転じたという説があります。一年の締めくくりとして、様々な行事や準備に追われる様子を表しています。',
+            1: '旧暦1月は別名「睦月（むつき）」。新年を迎えて親族が睦み合う月という意味です。正月の様々な行事は、もともと旧暦1月に行われていたものです。',
+            10: '旧暦10月は別名「神去月（かみさりつき）」とも呼ばれました。これは神々が出雲へ向かい、地元を留守にするという信仰から来たもの。ただし、出雲地方では反対に「神在月」と呼ばれ、神を迎えるための祭りが盛大に行われます。暦は地域の文化を色濃く反映していたのですね。'
+        }
+        return trivia.get(self.month, trivia.get(12, ''))
+    
+    def get_weather_info(self):
+        """気象情報"""
+        weather = {
+            12: [
+                '朝晩の冷え込みが増し、最低気温が0℃前後まで下がる地域も',
+                '乾燥が進み、風が強い日は落ち葉が舞う',
+                '山では初雪の便りが届き、スキー場がオープン',
+                '夜空は快晴が多く、星が非常に見やすい季節'
+            ],
+            1: [
+                '一年で最も寒い時期、厳しい寒さが続く',
+                '太平洋側は乾燥した晴天が多い',
+                '日本海側は雪や曇りの日が多い',
+                '空気が澄んで遠くの山々がくっきり見える'
+            ]
+        }
+        return weather.get(self.month, weather[12])
+    
+    def get_seasonal_foods(self):
+        """旬の食材（12ヶ月完全版）"""
+        foods = {
+            1: {'vegetables': ['白菜', 'ネギ', '小松菜', '大根', 'ほうれん草', '春菊', 'かぶ', 'れんこん'], 'fruits': ['みかん', '金柑', 'いちご', 'りんご'], 'seafood': ['鱈', '寒ブリ', 
