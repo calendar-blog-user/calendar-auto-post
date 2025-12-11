@@ -1,4 +1,16 @@
-name: Daily Calendar Poston:schedule:# 毎日朝7時 (JST) = 前日22時 (UTC)- cron: '0 22 * * *'workflow_dispatch: # 手動実行用jobs:post-calendar:runs-on: ubuntu-lateststeps:
+name: Daily Calendar Post
+
+on:
+  schedule:
+    # 毎日日本時間 7:00 に実行（UTC   22:00）
+    - cron: '0 22 * * *'
+  workflow_dispatch:  # 手動実行を有効化
+
+jobs:
+  post-calendar:
+    runs-on: ubuntu-latest
+    
+    steps:
 - name: Checkout repository
   uses: actions/checkout@v3
   
@@ -26,3 +38,5 @@ name: Daily Calendar Poston:schedule:# 毎日朝7時 (JST) = 前日22時 (UTC)- 
   run: |
     # ログに合わせてファイル名を calendar_post.py にしています
     python calendar_post.py
+
+          retention-days: 7
