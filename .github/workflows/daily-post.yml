@@ -1,29 +1,25 @@
-name: Daily Calendar Post
+env:
+  BLOG_ID: ${{ secrets.BLOG_ID }}
+  GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+  GOOGLE_TOKEN: ${{ secrets.GOOGLE_TOKEN }}
+  GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}  # ← これを追加
+```
 
-on:
-  schedule:
-    - cron: '0 21 * * *'  # 毎日JST 06:00に実行
-  workflow_dispatch:  # 手動実行も可能
+### 3. **動作確認**
 
-jobs:
-  post:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-      
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-      
-      - name: Run calendar post
-        env:
-          BLOG_ID: ${{ secrets.BLOG_ID }}
-          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
-          GOOGLE_TOKEN: ${{ secrets.GOOGLE_TOKEN }}
-        run: |
-          python calendar_post.py
+#### 手動実行でテスト：
+1. GitHub リポジトリの **Actions** タブ
+2. **Daily Calendar Post** ワークフロー選択
+3. **Run workflow** → **Run workflow**
+
+#### ログで確認：
+```
+✅ Gemini API連携有効
+📝 Gemini APIで温かみのある文章を生成中...
+   ✓ 季節の移ろい冒頭
+   ✓ 自然の変化
+   ✓ 農事歴
+   ✓ 風習・しきたり
+   ✓ 神話・伝説
+   ✓ 旬の食材
+✨ 生成完了
