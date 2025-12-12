@@ -1,6 +1,15 @@
+# Google API関連
 google-auth-oauthlib==1.2.0
 google-auth-httplib2==0.2.0
 google-api-python-client==2.108.0
+google-auth==2.25.2
+
+# HTTP通信
 requests==2.31.0
-pytz==2023.3
-tzdata==2023.3
+
+# タイムゾーン処理
+pytz==2024.1
+tzdata==2024.1
+
+# その他
+certifi==2023.11.17
