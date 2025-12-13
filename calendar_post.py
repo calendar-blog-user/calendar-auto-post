@@ -306,8 +306,8 @@ class GeminiContentGenerator:
     
     def __init__(self, api_key):
         self.api_key = api_key
-        # v1beta ではなく v1 を使用
-        self.base_url = "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent"
+        # 正しいモデル名を使用
+        self.base_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent"
     
     def generate_all_content(self, date, lunar, sekki, kou):
         """Geminiで全セクションを生成"""
