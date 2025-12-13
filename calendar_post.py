@@ -306,8 +306,8 @@ class GeminiContentGenerator:
     
     def __init__(self, api_key):
         self.api_key = api_key
-        # 安定版のgemini-proを使用
-        self.base_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent"
+        # v1エンドポイントとgemini-proを使用
+        self.base_url = "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent"
     
     def generate_all_content(self, date, lunar, sekki, kou):
         """Geminiで全セクションを生成"""
@@ -361,8 +361,11 @@ class GeminiContentGenerator:
             }
             
             print("  Gemini APIにリクエスト送信中...")
+            # URLにAPIキーを直接含める方式
+            url_with_key = f"{self.base_url}?key={self.api_key}"
+            
             response = requests.post(
-                f"{self.base_url}?key={self.api_key}",
+                url_with_key,
                 headers=headers,
                 json=data,
                 timeout=60
