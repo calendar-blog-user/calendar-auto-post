@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-暦情報自動投稿システム - Gemini完全生成版
-計算部分以外はすべてGeminiが生成
+暦情報自動投稿システム - Gemini完全生成版（修正版）
 """
 
 import os
@@ -312,7 +311,8 @@ class GeminiContentGenerator:
     def generate_all_content(self, date, lunar, sekki, kou):
         """Geminiで全セクションを生成"""
         if not self.api_key:
-            return self._generate_fallback_content(date, lunar, sekki, kou)
+            print("  ✗ GEMINI_API_KEYが設定されていません")
+            raise Exception("GEMINI_API_KEYが必要です")
         
         lunar_month_name = LunarCalendar.get_lunar_month_name(lunar['month'])
         
@@ -359,7 +359,7 @@ class GeminiContentGenerator:
                 }
             }
             
-            print("  Geminiでコンテンツ生成中...")
+            print("  Gemini APIにリクエスト送信中...")
             response = requests.post(
                 f"{self.base_url}?key={self.api_key}",
                 headers=headers,
@@ -367,70 +367,33 @@ class GeminiContentGenerator:
                 timeout=60
             )
             
+            print(f"  レスポンスステータス: {response.status_code}")
+            
             if response.status_code == 200:
                 result = response.json()
-                content = result['candidates'][0]['content']['parts'][0]['text'].strip()
-                print("  ✓ Geminiコンテンツ生成完了")
-                return content
-            else:
-                print(f"  ✗ Gemini APIエラー: {response.status_code}")
-                return self._generate_fallback_content(date, lunar, sekki, kou)
                 
+                # デバッグ: レスポンス構造を確認
+                print(f"  レスポンスキー: {result.keys()}")
+                
+                if 'candidates' in result and len(result['candidates']) > 0:
+                    content = result['candidates'][0]['content']['parts'][0]['text'].strip()
+                    print(f"  ✓ Geminiコンテンツ生成完了（{len(content)}文字）")
+                    return content
+                else:
+                    print(f"  ✗ レスポンス形式が不正: {result}")
+                    raise Exception("Geminiレスポンスに候補がありません")
+            else:
+                error_text = response.text
+                print(f"  ✗ Gemini APIエラー: {response.status_code}")
+                print(f"  エラー詳細: {error_text}")
+                raise Exception(f"Gemini API エラー: {response.status_code}")
+                
+        except requests.exceptions.Timeout:
+            print("  ✗ Gemini APIタイムアウト")
+            raise Exception("Gemini APIがタイムアウトしました")
         except Exception as e:
             print(f"  ✗ Geminiエラー: {str(e)}")
-            return self._generate_fallback_content(date, lunar, sekki, kou)
-    
-    def _generate_fallback_content(self, date, lunar, sekki, kou):
-        """Gemini未使用時のフォールバックコンテンツ"""
-        lunar_month_name = LunarCalendar.get_lunar_month_name(lunar['month'])
-        
-        return f"""☀️ 季節の移ろい（二十四節気・七十二候）
-
-二十四節気では{sekki[0]}（{sekki[1]}）を迎えています。七十二候では{kou[0]}（{kou[1]}）の時期です。
-
-🎌 記念日・祝日
-
-{date.month}月{date.day}日の記念日や祝日について。
-
-💡 暦にまつわる文化雑学
-
-{lunar_month_name}にまつわる文化や伝統について。
-
-🚜 農事歴
-
-この時期の農作業について。
-
-🏡 日本の風習・しきたり
-
-この時期の伝統的な風習について。
-
-📚 神話・伝説
-
-この季節に伝わる神話や伝説について。
-
-🍁 自然・気象
-
-この時期の自然の様子や気象について。
-
-🍴 旬の食
-
-この季節の旬の食材について。
-
-🌸 季節の草木
-
-この時期に咲く花や植物について。
-
-🌕 月や星の暦・天文情報
-
-月齢{lunar['age']}の{lunar['phase']}。{lunar['appearance']}
-
-🎨 伝統工芸
-
-この季節の伝統工芸について。
-
-🎼 伝統芸能
-
-この時期の伝統芸能について。"""
+            raise
 
 
 class CalendarPostGenerator:
@@ -439,7 +402,7 @@ class CalendarPostGenerator:
     def __init__(self, target_date=None, gemini_api_key=None):
         self.jst = ZoneInfo("Asia/Tokyo")
         self.date = target_date or datetime.now(self.jst)
-        self.gemini = GeminiContentGenerator(gemini_api_key) if gemini_api_key else None
+        self.gemini_key = gemini_api_key
     
     def generate_post(self):
         """投稿内容生成"""
@@ -456,21 +419,10 @@ class CalendarPostGenerator:
         # 季節の言葉
         seasonal_words = f"{lunar_month_name}・歳末・{sekki[0]}"
         
-        # 検証報告セクション
-        verification = f"""🔍 検証報告
-
-本日の暦情報は、天文計算に基づいて自動算出されています。
-
-・太陽黄経から二十四節気「{sekki[0]}」を判定
-・月齢{lunar['age']}から月相「{lunar['phase']}」を算出
-・旧暦{lunar['month']}月{lunar['day']}日を計算
-・干支「{lunar['eto']}」、六曜「{lunar['rokuyou']}」を導出
-
-これらの計算値をもとに、以下の文化的解説をGemini AIが生成しています。"""
-        
         # Geminiでコンテンツ生成
-        print("Geminiでコンテンツ生成中...")
-        gemini_content = self.gemini.generate_all_content(self.date, lunar, sekki, kou) if self.gemini else GeminiContentGenerator(None)._generate_fallback_content(self.date, lunar, sekki, kou)
+        print("\nGeminiでコンテンツ生成中...")
+        gemini_generator = GeminiContentGenerator(self.gemini_key)
+        gemini_content = gemini_generator.generate_all_content(self.date, lunar, sekki, kou)
         
         # HTML生成
         html = f"""
@@ -485,10 +437,6 @@ class CalendarPostGenerator:
 <p style="margin: 10px 0 0 0; font-size: 18px;">干支：{lunar['eto']}</p>
 <p style="margin: 10px 0 0 0; font-size: 18px;">六曜：{lunar['rokuyou']}</p>
 <p style="margin: 10px 0 0 0; font-size: 17px;">季節の言葉：{seasonal_words}</p>
-</div>
-
-<div style="background: #f7fafc; padding: 25px; border-radius: 12px; border-left: 5px solid #805ad5; margin-bottom: 35px;">
-<p style="margin: 0; line-height: 2; font-size: 15px; color: #44337a; white-space: pre-line;">{verification}</p>
 </div>
 
 <hr style="border: none; border-top: 3px solid #e2e8f0; margin: 40px 0;">
@@ -511,7 +459,7 @@ class CalendarPostGenerator:
         return {
             'title': f'{self.date.year}年{self.date.month}月{self.date.day}日({weekday})の暦 - {sekki[0]}・{lunar_month_name}',
             'content': html,
-            'labels': ['暦', '二十四節気', '七十二候', '旧暦', '季節', '伝統', '行事', '自然', '月齢', '干支', 'AI生成']
+            'labels': ['暦', '二十四節気', '七十二候', '旧暦', '季節', '伝統', '行事', '自然', '月齢', '干支']
         }
 
 
@@ -573,18 +521,16 @@ def main():
         if not blog_id:
             raise Exception("BLOG_ID環境変数が設定されていません")
         
+        if not gemini_key:
+            raise Exception("GEMINI_API_KEY環境変数が設定されていません")
+        
         print("=" * 70)
         print("暦情報自動投稿システム - Gemini完全生成版")
         print("=" * 70)
         jst = ZoneInfo('Asia/Tokyo')
         now = datetime.now(jst)
         print(f"実行日時: {now.strftime('%Y年%m月%d日 %H:%M:%S')}")
-        
-        if not gemini_key:
-            print("警告: GEMINI_API_KEYが設定されていません")
-            print("      フォールバックコンテンツで投稿します")
-        else:
-            print(f"Gemini API: 有効")
+        print(f"Gemini API Key: {gemini_key[:20]}...{gemini_key[-4:]}")
         
         print("\n" + "=" * 70)
         
