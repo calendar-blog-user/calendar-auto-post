@@ -297,53 +297,42 @@ class GeminiContentGenerator:
 【本日の暦情報】
 ・西暦: {date.year}年{date.month}月{date.day}日
 ・旧暦: {lunar['month']}月{lunar['day']}日（{lunar['month_name']}）
-・六曜: {lunar['rokuyou']}
 ・月齢: {lunar['age']}（{lunar['phase']}）
 ・二十四節気: {sekki[0]}（{sekki[1]}）
 ・七十二候: {kou[0]}（{kou[1]}）
 
-【最重要：必ず守る書式ルール】
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-1. 段落は2-3文書いたら**必ず空行**を入れること
-2. 段落と段落の間には**必ず空の行**を1行入れること
-3. 箇条書きの前後にも**必ず空行**を入れること
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【絶対に守るべき書式ルール】
+1. **段落は必ず2-3文ごとに空行で区切ること**（これが最重要！）
+2. **箇条書きを積極的に使用すること**：
+   - リスト項目は必ず「* 」または「- 」で始める
+   - リスト項目の後には必ず空行を入れる
+3. **文体**：
+   - 「ですます調」で親しみやすく
+   - 「でございます」などの古風な表現は絶対に使わない
+4. **各セクションは300文字以上で具体的に書く**
 
-【正しい書式の例】
-```
-今は二十四節気の「大雪」の時期です。この頃は雪が本格的に降り始めます。
-
-七十二候では「熊蟄穴」を迎えています。動物たちが冬眠する頃です。
-
-この季節のポイント:
-
-* **雪の季節**：山々が白く染まります
-* **冬支度**：暖かく過ごす準備が大切です
-
-外は寒いですが、家族との団らんが温かいですね。
-```
-
-【悪い例（絶対にこうしないこと）】
-```
-今は二十四節気の「大雪」の時期です。この頃は雪が本格的に降り始めます。七十二候では「熊蟄穴」を迎えています。動物たちが冬眠する頃です。この季節のポイント:
-* **雪の季節**：山々が白く染まります
-* **冬支度**：暖かく過ごす準備が大切です
-外は寒いですが、家族との団らんが温かいですね。
-```
-
-【文体ルール】
-- 「ですます調」で親しみやすく
-- 「でございます」などの古風な表現は使わない
-- 各セクションは300文字以上で具体的に
-
-【出力フォーマット】
-以下の順番で、前置きなしで「☀️ 季節の移ろい」から開始し、🎼 伝統芸能で終了すること：
+【出力フォーマット例】
+以下のような形式で必ず出力してください：
 
 ☀️ 季節の移ろい（二十四節気・七十二候）
 
+今は二十四節気の「{sekki[0]}」の時期です。この頃は〜〜です。
+
+七十二候では「{kou[0]}」を迎えています。これは〜〜という意味です。
+
+* **ポイント1**：〜〜について
+* **ポイント2**：〜〜について
+* **ポイント3**：〜〜について
+
+この季節は〜〜ですね。
+
 🎌 記念日・祝日
 
+（同様に段落と箇条書きを使う）
+
 💡 暦にまつわる文化雑学
+
+（同様に段落と箇条書きを使う）
 
 🚜 農事歴
 
@@ -363,7 +352,13 @@ class GeminiContentGenerator:
 
 🎼 伝統芸能
 
-それでは、**必ず2-3文ごとに空行を入れて**、親しみやすく温かい文章で本日の暦情報を詳しく解説してください。"""
+【重要な注意事項】
+- 前置きは一切不要。「☀️ 季節の移ろい」からすぐに始めること
+- 🎼 伝統芸能の内容が終わったら、それ以降は何も書かないこと
+- 長い文章を書く場合は、必ず2-3文ごとに空行を入れて段落を分けること
+- 箇条書きは * または - で始め、その後に空行を入れること
+
+それでは、上記の形式に従って、親しみやすく温かい文章で本日の暦情報を詳しく解説してください。"""
         
         try:
             headers = {"Content-Type": "application/json"}
@@ -432,7 +427,6 @@ class CalendarPostGenerator:
         lunar = AccurateLunarCalendar.calculate_lunar_date(self.date)
         sekki = AccurateSolarTermCalculator.get_current_sekki(self.date)
         kou = AccurateSolarTermCalculator.get_current_kou(self.date)
-        sun_times = SunCalculator.calculate_sunrise_sunset(self.date)
         
         weekdays = ["月", "火", "水", "木", "金", "土", "日"]
         weekday = weekdays[self.date.weekday()]
@@ -445,13 +439,8 @@ class CalendarPostGenerator:
 <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 15px; margin-bottom: 30px; box-shadow: 0 10px 25px rgba(0,0,0,0.15);">
 <p style="margin: 0; font-size: 24px; font-weight: bold;">西暦: {self.date.year}年{self.date.month}月{self.date.day}日（{weekday}曜日）</p>
 <p style="margin: 15px 0 0 0; font-size: 20px;">旧暦: {lunar['month']}月{lunar['day']}日（{lunar['month_name']}）</p>
-<p style="margin: 10px 0 0 0; font-size: 20px;">六曜: {lunar['rokuyou']}</p>
 <p style="margin: 10px 0 0 0; font-size: 20px;">月齢: {lunar['age']}（{lunar['phase']}）</p>
 <p style="margin: 10px 0 0 0; font-size: 17px; opacity: 0.95; line-height: 1.7;">{lunar['appearance']}</p>
-<p style="margin: 15px 0 0 0; font-size: 18px; border-top: 1px solid rgba(255,255,255,0.3); padding-top: 15px;">
-<strong>岡山の日の出・日の入り</strong><br>
-日の出: {sun_times['sunrise']} / 日の入り: {sun_times['sunset']}
-</p>
 </div>
 
 <div style="background: #f7fafc; padding: 25px; border-radius: 12px; border-left: 5px solid #4299e1; margin-bottom: 35px;">
