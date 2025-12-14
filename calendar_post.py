@@ -416,11 +416,10 @@ class CalendarPostGenerator:
         }
     
     def _format_gemini_content_to_html(self, content):
-        """GeminiコンテンツをHTML形式に整形（改善版）"""
+        """GeminiコンテンツをHTML形式に整形（Markdown対応版）"""
         if not content:
             return ""
         
-        # 行ごとに分割
         lines = content.split('\n')
         html_parts = []
         current_section = None
@@ -442,16 +441,16 @@ class CalendarPostGenerator:
         }
         
         for line in lines:
-            line = line.strip()
+            line_stripped = line.strip()
             
             # セクション開始を検出
             is_section_start = False
             for emoji, (color, name) in section_config.items():
-                if line.startswith(emoji):
+                if line_stripped.startswith(emoji):
                     # 前のセクションを保存
                     if current_section and current_content:
                         emoji_key, color_val = current_section
-                        section_body = '\n'.join(current_content)
+                        section_body = self._convert_markdown_to_html(current_content)
                         html_parts.append(self._create_section_html(
                             line_with_emoji=f"{emoji_key} {section_config[emoji_key][1]}",
                             content=section_body,
@@ -464,13 +463,13 @@ class CalendarPostGenerator:
                     is_section_start = True
                     break
             
-            if not is_section_start and line:
+            if not is_section_start and line_stripped:
                 current_content.append(line)
         
         # 最後のセクションを保存
         if current_section and current_content:
             emoji_key, color_val = current_section
-            section_body = '\n'.join(current_content)
+            section_body = self._convert_markdown_to_html(current_content)
             html_parts.append(self._create_section_html(
                 line_with_emoji=f"{emoji_key} {section_config[emoji_key][1]}",
                 content=section_body,
@@ -479,12 +478,79 @@ class CalendarPostGenerator:
         
         return ''.join(html_parts)
     
+    def _convert_markdown_to_html(self, lines):
+        """MarkdownテキストをHTMLに変換"""
+        html = []
+        in_list = False
+        current_paragraph = []
+        
+        for line in lines:
+            stripped = line.strip()
+            
+            # 箇条書きの処理（* または - で始まる行）
+            if stripped.startswith('* ') or stripped.startswith('- '):
+                # 段落を閉じる
+                if current_paragraph:
+                    html.append(f"<p style='margin: 0 0 15px 0; line-height: 2;'>{''.join(current_paragraph)}</p>")
+                    current_paragraph = []
+                
+                # リスト開始
+                if not in_list:
+                    html.append("<ul style='margin: 15px 0; padding-left: 25px;'>")
+                    in_list = True
+                
+                # リスト項目
+                item_text = stripped[2:].strip()  # * または - を除去
+                # 太字処理 **text**
+                item_text = self._process_bold(item_text)
+                html.append(f"<li style='margin-bottom: 12px; line-height: 2;'>{item_text}</li>")
+            
+            # 空行
+            elif not stripped:
+                # リストを閉じる
+                if in_list:
+                    html.append("</ul>")
+                    in_list = False
+                
+                # 段落を閉じる
+                if current_paragraph:
+                    html.append(f"<p style='margin: 0 0 15px 0; line-height: 2;'>{''.join(current_paragraph)}</p>")
+                    current_paragraph = []
+            
+            # 通常の段落
+            else:
+                # リストを閉じる
+                if in_list:
+                    html.append("</ul>")
+                    in_list = False
+                
+                # 段落に追加
+                processed_line = self._process_bold(stripped)
+                current_paragraph.append(processed_line)
+        
+        # 最後のリストを閉じる
+        if in_list:
+            html.append("</ul>")
+        
+        # 最後の段落を閉じる
+        if current_paragraph:
+            html.append(f"<p style='margin: 0 0 15px 0; line-height: 2;'>{''.join(current_paragraph)}</p>")
+        
+        return ''.join(html)
+    
+    def _process_bold(self, text):
+        """太字マークダウン（**text**）をHTMLに変換"""
+        import re
+        # **text** を <strong>text</strong> に変換
+        text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', text)
+        return text
+    
     def _create_section_html(self, line_with_emoji, content, color):
         """セクションのHTMLを生成"""
         return f"""
 <h3 style="color: #2d3748; font-size: 26px; margin: 35px 0 25px 0; border-left: 6px solid {color}; padding-left: 15px;">{line_with_emoji}</h3>
 <div style="background: #f7fafc; padding: 28px; border-radius: 12px; margin-bottom: 30px; border-left: 4px solid {color};">
-<div style="color: #2d3748; line-height: 2.2; font-size: 16px; white-space: pre-wrap;">{content}</div>
+<div style="color: #2d3748; font-size: 16px;">{content}</div>
 </div>
 """
     
