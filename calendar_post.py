@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-暦情報自動投稿システム - Gemini統合版
+暦情報自動投稿システム - Gemini統合版（改善版）
 正確な天文計算 + Gemini AIによる豊かな文章生成
 """
 
 import os
 import json
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime
 from zoneinfo import ZoneInfo
 import math
 import requests
+import time
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
@@ -225,13 +226,13 @@ class GeminiContentGenerator:
     
     def __init__(self, api_key):
         self.api_key = api_key
-        self.endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent"
+        self.endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
     
     def generate_content(self, date, lunar, sekki, kou):
         """Geminiで文章生成"""
         
         prompt = f"""本日の暦情報にもとづいて、以下の指示に従って自然・歴史・信仰・暮らしの視点から文化的背景とともに網羅的に詳しく、豊かで情緒的な表現で解説してください。
-文章は適度に改行してください。
+文章は適度に改行してください。各セクションは最低でも300文字以上、充実した内容で書いてください。
 
 【本日の暦情報】
 ・西暦: {date.year}年{date.month}月{date.day}日
@@ -245,51 +246,85 @@ class GeminiContentGenerator:
 
 📅 2. 必ず次のような章立てで出力
 回答は前置きを一切付けず、「☀️ 季節の移ろい」から開始し、🎼 伝統芸能の内容まで出力し、それ以降は一切書かないこと。
-章立ては以下の通りとし、表形式は絶対に使用しないで、箇条書きで網羅的に詳しく、豊かで情緒的な表現で解説してください。
+章立ては以下の通りとし、表形式は絶対に使用しないで、各セクションごとに詳しく豊かで情緒的な表現で解説してください。
 
 ☀️ 季節の移ろい（二十四節気・七十二候）
+
 🎌 記念日・祝日
+
 💡 暦にまつわる文化雑学
+
 🚜 農事歴
+
 🏡 日本の風習・しきたり
+
 📚 神話・伝説
+
 🍁 自然・気象
+
 🍴 旬の食
+
 🌸 季節の草木
+
 🌕 月や星の暦・天文情報
+
 🎨 伝統工芸
-🎼 伝統芸能"""
+
+🎼 伝統芸能
+
+重要：各セクションは詳しく書き、全体で5000文字以上になるようにしてください。"""
         
         try:
             headers = {"Content-Type": "application/json"}
             data = {
                 "contents": [{"parts": [{"text": prompt}]}],
                 "generationConfig": {
-                    "temperature": 0.8,
+                    "temperature": 0.9,
                     "topK": 40,
                     "topP": 0.95,
                     "maxOutputTokens": 8192,
                 }
             }
             
+            print("Gemini APIにリクエスト送信中...")
             response = requests.post(
                 f"{self.endpoint}?key={self.api_key}",
                 headers=headers,
                 json=data,
-                timeout=60
+                timeout=120
             )
+            
+            print(f"ステータスコード: {response.status_code}")
             
             if response.status_code == 200:
                 result = response.json()
+                print(f"APIレスポンス取得成功")
+                
                 if 'candidates' in result and len(result['candidates']) > 0:
-                    content = result['candidates'][0]['content']['parts'][0]['text']
-                    return content
-            
-            print(f"Gemini APIエラー: {response.status_code}")
-            return None
+                    candidate = result['candidates'][0]
+                    
+                    if 'content' in candidate and 'parts' in candidate['content']:
+                        content = candidate['content']['parts'][0]['text']
+                        print(f"生成されたコンテンツ長: {len(content)}文字")
+                        print(f"コンテンツプレビュー（最初の200文字）:\n{content[:200]}...")
+                        return content
+                    else:
+                        print("エラー: コンテンツ構造が予期しない形式です")
+                        print(f"候補データ: {json.dumps(candidate, ensure_ascii=False, indent=2)}")
+                else:
+                    print("エラー: 候補が空です")
+                    print(f"完全なレスポンス: {json.dumps(result, ensure_ascii=False, indent=2)}")
+                
+                return None
+            else:
+                print(f"Gemini APIエラー: {response.status_code}")
+                print(f"エラー内容: {response.text}")
+                return None
                 
         except Exception as e:
-            print(f"Gemini API呼び出しエラー: {str(e)}")
+            print(f"Gemini API呼び出し例外: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return None
 
 
@@ -331,16 +366,26 @@ class CalendarPostGenerator:
 """
         
         # Geminiでコンテンツ生成
+        print("\n" + "="*70)
         print("Gemini APIでコンテンツを生成中...")
-        generator = GeminiContentGenerator(self.gemini_api_key)
-        gemini_content = generator.generate_content(self.date, lunar, sekki, kou)
+        print("="*70)
+        
+        if not self.gemini_api_key:
+            print("エラー: GEMINI_API_KEYが設定されていません")
+            gemini_content = None
+        else:
+            generator = GeminiContentGenerator(self.gemini_api_key)
+            gemini_content = generator.generate_content(self.date, lunar, sekki, kou)
         
         if not gemini_content:
-            print("警告: Geminiコンテンツの生成に失敗しました。デフォルトコンテンツを使用します。")
-            gemini_content = self._generate_fallback_content(lunar, sekki, kou)
+            print("\n警告: Geminiコンテンツの生成に失敗しました。")
+            print("フォールバックコンテンツを使用します。")
+            gemini_content = self._generate_rich_fallback_content(lunar, sekki, kou)
         
         # HTML整形
-        gemini_html = self._format_gemini_content(gemini_content)
+        print("\nHTML整形処理を開始...")
+        gemini_html = self._format_gemini_content_to_html(gemini_content)
+        print(f"整形後のHTML長: {len(gemini_html)}文字")
         
         # 締めの挨拶
         closing = """
@@ -362,98 +407,228 @@ class CalendarPostGenerator:
             'labels': ['暦', '二十四節気', '旧暦', '季節', '七十二候', '農事歴', '風習', '伝統文化', '行事食', '天文', '神話', '伝統芸能']
         }
     
-    def _format_gemini_content(self, content):
-        """Geminiコンテンツを HTML形式に整形"""
-        sections = content.split('\n\n')
-        html_parts = []
+    def _format_gemini_content_to_html(self, content):
+        """GeminiコンテンツをHTML形式に整形（改善版）"""
+        if not content:
+            return ""
         
-        section_styles = {
-            '☀️': '#fc8181',
-            '🎌': '#f6ad55',
-            '💡': '#4299e1',
-            '🚜': '#68d391',
-            '🏡': '#9f7aea',
-            '📚': '#ed64a6',
-            '🍁': '#38b2ac',
-            '🍴': '#f56565',
-            '🌸': '#f687b3',
-            '🌕': '#4299e1',
-            '🎨': '#ed8936',
-            '🎼': '#805ad5'
+        # 行ごとに分割
+        lines = content.split('\n')
+        html_parts = []
+        current_section = None
+        current_content = []
+        
+        section_config = {
+            '☀️': ('#fc8181', '季節の移ろい'),
+            '🎌': ('#f6ad55', '記念日・祝日'),
+            '💡': ('#4299e1', '暦にまつわる文化雑学'),
+            '🚜': ('#68d391', '農事歴'),
+            '🏡': ('#9f7aea', '日本の風習・しきたり'),
+            '📚': ('#ed64a6', '神話・伝説'),
+            '🍁': ('#38b2ac', '自然・気象'),
+            '🍴': ('#f56565', '旬の食'),
+            '🌸': ('#f687b3', '季節の草木'),
+            '🌕': ('#4299e1', '月や星の暦・天文情報'),
+            '🎨': ('#ed8936', '伝統工芸'),
+            '🎼': ('#805ad5', '伝統芸能')
         }
         
-        for section in sections:
-            if not section.strip():
-                continue
+        for line in lines:
+            line = line.strip()
             
-            # セクションタイトルを検出
-            for emoji, color in section_styles.items():
-                if section.startswith(emoji):
-                    title_end = section.find('\n')
-                    if title_end > 0:
-                        title = section[:title_end]
-                        body = section[title_end+1:]
-                        
-                        html_parts.append(f"""
-<h3 style="color: #2d3748; font-size: 26px; margin: 35px 0 25px 0; border-left: 6px solid {color}; padding-left: 15px;">{title}</h3>
-<div style="background: #f7fafc; padding: 25px; border-radius: 12px; margin-bottom: 30px; border-left: 4px solid {color};">
-<div style="color: #2d3748; line-height: 2; font-size: 16px; white-space: pre-wrap;">{body}</div>
-</div>
-""")
+            # セクション開始を検出
+            is_section_start = False
+            for emoji, (color, name) in section_config.items():
+                if line.startswith(emoji):
+                    # 前のセクションを保存
+                    if current_section and current_content:
+                        emoji_key, color_val = current_section
+                        section_body = '\n'.join(current_content)
+                        html_parts.append(self._create_section_html(
+                            line_with_emoji=f"{emoji_key} {section_config[emoji_key][1]}",
+                            content=section_body,
+                            color=color_val
+                        ))
+                    
+                    # 新しいセクション開始
+                    current_section = (emoji, color)
+                    current_content = []
+                    is_section_start = True
                     break
+            
+            if not is_section_start and line:
+                current_content.append(line)
+        
+        # 最後のセクションを保存
+        if current_section and current_content:
+            emoji_key, color_val = current_section
+            section_body = '\n'.join(current_content)
+            html_parts.append(self._create_section_html(
+                line_with_emoji=f"{emoji_key} {section_config[emoji_key][1]}",
+                content=section_body,
+                color=color_val
+            ))
         
         return ''.join(html_parts)
     
-    def _generate_fallback_content(self, lunar, sekki, kou):
-        """フォールバックコンテンツ"""
+    def _create_section_html(self, line_with_emoji, content, color):
+        """セクションのHTMLを生成"""
+        return f"""
+<h3 style="color: #2d3748; font-size: 26px; margin: 35px 0 25px 0; border-left: 6px solid {color}; padding-left: 15px;">{line_with_emoji}</h3>
+<div style="background: #f7fafc; padding: 28px; border-radius: 12px; margin-bottom: 30px; border-left: 4px solid {color};">
+<div style="color: #2d3748; line-height: 2.2; font-size: 16px; white-space: pre-wrap;">{content}</div>
+</div>
+"""
+    
+    def _generate_rich_fallback_content(self, lunar, sekki, kou):
+        """充実したフォールバックコンテンツ"""
+        month = self.date.month
+        day = self.date.day
+        
         return f"""☀️ 季節の移ろい（二十四節気・七十二候）
 
-本日は二十四節気の「{sekki[0]}」、七十二候では「{kou[0]}」の時期です。
-日本の伝統的な暦は、太陽の動きと自然の変化を繊細に捉えています。
+本日は二十四節気の「{sekki[0]}」（{sekki[1]}）の時期です。二十四節気は、太陽の黄道上の位置によって一年を24等分したもので、古代中国で生まれ、日本の農耕文化に深く根付いてきました。
+
+七十二候では「{kou[0]}」（{kou[1]}）を迎えています。七十二候は二十四節気をさらに細かく、約5日ごとに分けたもので、季節の繊細な移ろいを表現しています。
+
+冬の深まりとともに、自然は静かに春の準備を始めています。寒さの中にも、確かな季節の息吹を感じることができる時期です。
 
 🎌 記念日・祝日
 
-本日の記念日をご確認ください。
+{month}月{day}日は、日本の暦において特別な意味を持つ日々が続く季節です。年末が近づき、一年の締めくくりに向けて様々な行事が行われます。
+
+師走という言葉が示すように、師も走るほど忙しい時期ですが、それは単なる慌ただしさではなく、一年の総決算として大切な営みが重なる時期でもあります。
+
+冬至が近づくと「一陽来復」という言葉が思い起こされます。これは、陰が極まって陽が復活し始めるという意味で、最も暗い時期を過ぎれば、必ず光が戻ってくるという希望を表しています。
 
 💡 暦にまつわる文化雑学
 
-旧暦{lunar['month']}月は「{lunar['month_name']}」と呼ばれています。
+旧暦{lunar['month']}月は「{lunar['month_name']}」と呼ばれます。この呼び名には深い意味が込められており、日本人の季節感や自然観が反映されています。
+
+神無月という名称には、全国の神々が出雲に集まり、各地では神様が不在になるという言い伝えがあります。ただし、出雲地方では逆に「神在月」と呼ばれ、神々を迎える特別な祭事が行われます。
+
+霜月になると、霜が降り始める季節として、冬の到来を実感する時期です。また、新嘗祭（にいなめさい）という重要な宮中祭祀が行われ、その年の収穫を神々に感謝する習わしがあります。
+
+師走は一年の最後の月として、様々な締めくくりの行事が行われます。「師が走る」ほど忙しいという説や、「年が果てる（しはす）」が転じたという説など、語源には諸説あります。
 
 🚜 農事歴
 
-この時期の農作業についてご紹介します。
+この時期、農村では一年の農作業がほぼ終わり、冬支度が本格化します。稲作地域では、脱穀・籾摺りが終わり、新米の出荷も一段落する頃です。
+
+畑では、大根・白菜・ネギなどの冬野菜が霜に当たって甘みを増し、最も美味しくなる時期を迎えます。特に大根は「寒大根」として珍重され、おでんやふろふき大根に最適です。
+
+伝統的には、この時期は「漬物の仕込み」の季節でもあります。沢庵漬け、白菜漬け、野沢菜漬けなど、冬の保存食として各家庭で漬物づくりが盛んに行われました。
+
+また、農具の手入れや修理、縄綯い（なわない）などの室内作業が中心となり、春の作付け計画を立てる大切な準備期間でもあります。
 
 🏡 日本の風習・しきたり
 
-季節に応じた風習があります。
+12月に入ると、一年の締めくくりとして様々な風習が行われます。すす払い（12月13日頃）は、一年の汚れを落とし、新年を清らかに迎えるための大切な行事です。
 
-📚 神話・伝説
+正月飾りの準備も本格化します。門松、しめ飾り、鏡餅など、それぞれに深い意味が込められた飾りを用意します。これらは単なる装飾ではなく、年神様を迎えるための神聖な道具です。
 
-日本の神話と暦の関わりは深いものがあります。
+冬至（12月21日頃）には、柚子湯に入る習慣があります。「冬至」と「湯治」をかけた語呂合わせと、柚子の香りで邪気を払うという意味が込められています。また、南瓜（かぼちゃ）を食べる習慣もあり、「ん」のつく食べ物を食べると運が良くなるという言い伝えがあります。
+
+大晦日には、除夜の鐘が108回鳴らされます。これは人間の煩悩の数を表し、一つ一つの鐘の音で煩悩を払い、清らかな心で新年を迎えるという意味があります。
+
+11月は「霜月」として、七五三（11月15日）や勤労感謝の日（新嘗祭）など、子どもの成長と収穫への感謝を祝う行事が行われます。
+
+🍚 神話・伝説
+
+師走から新年にかけての時期には、様々な神話や伝説が語り継がれています。特に「年神様」の存在は重要で、新年に各家庭を訪れて幸福をもたらすと信じられています。
+
+出雲神話では、神無月（10月）に全国の八百万の神々が出雲大社に集まり、人々の縁結びや来年の豊作について会議を行うとされています。これは『古事記』や『日本書紀』に記される国譲り神話とも深く関連しています。
+
+冬至は「一陽来復」の日として、陰陽思想において重要な転換点とされてきました。最も暗い時期を過ぎれば、必ず光が戻ってくるという思想は、日本人の自然観や人生観に大きな影響を与えています。
+
+また、大晦日から元日にかけての時間は、時間が止まる神聖な瞬間とされ、多くの神社仏閣で特別な儀式が行われます。
 
 🍁 自然・気象
 
-この時期の自然の変化を感じてください。
+12月は本格的な冬の到来を告げる季節です。朝晩の冷え込みが厳しくなり、霜柱が立つ朝も増えてきます。北国では本格的な降雪が始まり、山々は白銀の世界に包まれます。
+
+太平洋側では、乾燥した晴天が続くことが多く、空気が澄み渡るため、遠くの山々がくっきりと見えます。富士山をはじめとする名峰の雪化粧が美しい季節です。
+
+一方、日本海側では、冬型の気圧配置により雪や曇りの日が多くなります。季節風が日本海を渡る際に水蒸気を含み、山地にぶつかって大量の雪を降らせます。
+
+冬至を過ぎると、わずかずつですが日が長くなり始めます。暗闇の中にも、確かな春への歩みが始まっているのです。
+
+夜空は一年で最も美しい季節を迎えます。冬の大三角形（ベテルギウス、シリウス、プロキオン）やオリオン座が東の空から昇り、澄んだ空気の中で輝きます。
 
 🍴 旬の食
 
-季節の美味しい食材を楽しみましょう。
+12月は冬の食材が最盛期を迎える季節です。寒さで甘みを増した野菜類が特に美味しくなります。
+
+【野菜】大根、白菜、春菊、ほうれん草、かぶ、長ねぎ、里芋、ゆず、れんこん
+
+特に大根は「寒大根」として最高の味わいとなり、ふろふき大根、おでん、ぶり大根など、様々な料理で楽しめます。
+
+【果物】みかん、りんご、柚子、金柑
+
+みかんはこたつのお供として冬の風物詩です。柚子は冬至の柚子湯だけでなく、料理の香りづけにも欠かせません。
+
+【魚介】ブリ、カキ（牡蠣）、サバ、鱈、ふぐ、あんこう
+
+特にブリは「寒ブリ」として脂がのり、刺身や照り焼きで絶品です。牡蠣は「海のミルク」と呼ばれ、栄養豊富で鍋料理に最適です。
+
+【行事食】冬至には南瓜（かぼちゃ）を食べる習慣があり、年越しそばで一年を締めくくります。また、クリスマスのごちそうも現代の風物詩となっています。
+
+11月は「新米」の季節でもあり、秋の収穫を祝う「芋煮」「けんちん汁」などの郷土料理が各地で親しまれます。
 
 🌸 季節の草木
 
-今の時期に見られる草花をご紹介します。
+冬の草木は、厳しい寒さに耐えながらも、凛とした美しさを見せてくれます。
+
+【代表的な花】
+・水仙（すいせん）：清楚な白い花と芳香が特徴。霜に負けず咲く姿は冬の庭を彩ります。花言葉は「自己愛」「神秘」
+・山茶花（さざんか）：冬の訪れを告げる花。椿に似ていますが、花びらが散る様子が異なります。花言葉は「困難に打ち勝つ」「ひたむきさ」
+・千両（せんりょう）：赤い実をつける縁起物。正月飾りとして親しまれています。花言葉は「商売繁盛」「裕福」
+・南天（なんてん）：「難を転ずる」という語呂合わせから厄除けの木とされます
+・梅（うめ）：早いものは12月下旬から咲き始め、春の訪れを告げます
+
+【冬木立】葉を落とした木々の枝ぶりは、墨絵のような趣があり、日本庭園の冬景色を美しく演出します。
 
 🌕 月や星の暦・天文情報
 
-月齢{lunar['age']}の{lunar['phase']}です。
+本日の月齢は{lunar['age']}で、{lunar['phase']}です。{lunar['appearance']}
+
+冬の夜空は一年で最も美しい季節を迎えています。空気が澄んでいるため、星々が輝きを増し、天の川もくっきりと見えることがあります。
+
+【冬の星座】
+・オリオン座：冬の星座の王様。三つ星が目印で、ベテルギウス（赤色）とリゲル（青白色）という対照的な一等星を持ちます
+・冬の大三角：オリオン座のベテルギウス、おおいぬ座のシリウス、こいぬ座のプロキオンで形成される大きな三角形
+・おうし座：プレアデス星団（すばる）が美しい。日本では古くから「六連星（むつらぼし）」として親しまれています
+・ぎょしゃ座：一等星カペラを含む五角形の星座
+
+冬至の頃は、一年で最も昼が短く夜が長い時期です。しかし、これを過ぎると少しずつ日が長くなり、春への希望を感じることができます。
 
 🎨 伝統工芸
 
-季節に関連する伝統工芸があります。
+冬の農閑期は、伝統工芸の制作が盛んになる季節です。
+
+【藁細工】稲わらを使った工芸で、しめ縄、わらぐつ、縄飾りなど、実用性と美しさを兼ね備えた作品が作られます。特に正月飾りのしめ縄は、神聖な場所を示す大切な飾りです。
+
+【干し柿づくり】軒先に吊るされた柿は、冬の農村風景を彩る風物詩。天然の甘味料として重宝され、正月の縁起物としても用いられます。
+
+【曲げわっぱ】秋田県の伝統工芸。薄く削った杉材を曲げて作る弁当箱は、木の香りと調湿性に優れ、ご飯を美味しく保ちます。新米の季節に合わせて需要も高まります。
+
+【正月飾り作り】門松、しめ飾り、鏡餅など、新年を迎えるための飾りを手作りする伝統が各地に残っています。これらは単なる装飾ではなく、年神様を迎えるための神聖な準備です。
+
+【雪国の工芸】雪深い地域では、冬の間に様々な工芸品が作られます。竹細工、木彫り、織物など、長い冬を有意義に過ごすための知恵が詰まっています。
 
 🎼 伝統芸能
 
-この時期に関連する伝統芸能をご紹介します。"""
+冬は伝統芸能の公演が活発になる季節です。
+
+【歌舞伎】12月は「顔見世興行」が行われる重要な時期です。特に「仮名手本忠臣蔵」は冬の名作として、毎年この時期に上演されます。討ち入りの季節に合わせた演目として、江戸時代から人々に愛されてきました。
+
+【能楽】冬にふさわしい演目として、「小鍛冶」「羽衣」などが演じられます。また、年末年始には「翁」という特別な儀式的演目が奉納され、新年の平安を祈ります。
+
+【神楽】各地の神社で冬の祭礼に合わせて神楽が奉納されます。特に出雲地方では、神在祭に合わせて壮大な神楽が演じられ、神話の世界を今に伝えています。
+
+【雅楽】宮中や大きな神社では、年末年始の儀式に雅楽が演奏されます。千年以上の歴史を持つ音楽は、厳かな雰囲気の中で響き渡ります。
+
+【民俗芸能】各地に伝わる獅子舞、田楽、盆踊りなどの民俗芸能も、冬の祭りで披露されます。これらは五穀豊穣や無病息災を祈る、庶民の芸能です。"""
 
 
 class BloggerPoster:
@@ -498,11 +673,11 @@ class BloggerPoster:
             request = self.service.posts().insert(blogId=blog_id, body=post)
             response = request.execute()
             
-            print(f"投稿成功: {response.get('url')}")
+            print(f"\n✅ 投稿成功: {response.get('url')}")
             return response
             
         except Exception as e:
-            print(f"投稿エラー: {str(e)}")
+            print(f"\n❌ 投稿エラー: {str(e)}")
             raise
 
 
@@ -518,34 +693,36 @@ def main():
             raise Exception("GEMINI_API_KEY環境変数が設定されていません")
         
         print("=" * 70)
-        print("暦情報自動投稿システム Gemini統合版 起動")
+        print("🌸 暦情報自動投稿システム Gemini 2.5 Flash統合版 起動")
         print("=" * 70)
-        print(f"投稿日時: {datetime.now(ZoneInfo('Asia/Tokyo')).strftime('%Y年%m月%d日 %H:%M:%S')}")
+        print(f"📅 投稿日時: {datetime.now(ZoneInfo('Asia/Tokyo')).strftime('%Y年%m月%d日 %H:%M:%S')}")
         
         # 暦情報生成
-        print("\n今日の暦情報を生成中...")
-        print("- 正確な天文計算による二十四節気・七十二候")
-        print("- Gemini AIによる豊かな文章生成")
+        print("\n🔄 今日の暦情報を生成中...")
+        print("  - 正確な天文計算による二十四節気・七十二候")
+        print("  - Gemini 2.5 Flash AIによる豊かな文章生成")
+        print("  - 12セクション完全対応")
         
         generator = CalendarPostGenerator()
         post_data = generator.generate_post()
         
-        print(f"\nタイトル: {post_data['title']}")
-        print(f"推定文字数: 約{len(post_data['content'])}文字")
+        print(f"\n📝 タイトル: {post_data['title']}")
+        print(f"📊 推定文字数: 約{len(post_data['content'])}文字")
+        print(f"🏷️  ラベル: {', '.join(post_data['labels'])}")
         
         # Blogger投稿
-        print("\nBloggerに投稿中...")
+        print("\n📤 Bloggerに投稿中...")
         poster = BloggerPoster()
         poster.authenticate()
         poster.post_to_blog(blog_id, post_data['title'], post_data['content'], post_data['labels'])
         
         print("\n" + "=" * 70)
-        print("すべての処理が完了しました！")
-        print("正確な暦情報とGemini生成の豊かな文章が投稿されました")
+        print("✨ すべての処理が完了しました！")
+        print("📚 正確な暦情報とGemini生成の豊かな文章が投稿されました")
         print("=" * 70)
         
     except Exception as e:
-        print(f"\nエラーが発生しました: {str(e)}")
+        print(f"\n❌ エラーが発生しました: {str(e)}")
         import traceback
         traceback.print_exc()
         sys.exit(1)
