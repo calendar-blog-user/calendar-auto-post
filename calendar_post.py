@@ -427,7 +427,6 @@ class CalendarPostGenerator:
         lunar = AccurateLunarCalendar.calculate_lunar_date(self.date)
         sekki = AccurateSolarTermCalculator.get_current_sekki(self.date)
         kou = AccurateSolarTermCalculator.get_current_kou(self.date)
-        sun_times = SunCalculator.calculate_sunrise_sunset(self.date)
         
         weekdays = ["月", "火", "水", "木", "金", "土", "日"]
         weekday = weekdays[self.date.weekday()]
@@ -440,13 +439,8 @@ class CalendarPostGenerator:
 <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 15px; margin-bottom: 30px; box-shadow: 0 10px 25px rgba(0,0,0,0.15);">
 <p style="margin: 0; font-size: 24px; font-weight: bold;">西暦: {self.date.year}年{self.date.month}月{self.date.day}日（{weekday}曜日）</p>
 <p style="margin: 15px 0 0 0; font-size: 20px;">旧暦: {lunar['month']}月{lunar['day']}日（{lunar['month_name']}）</p>
-<p style="margin: 10px 0 0 0; font-size: 20px;">六曜: {lunar['rokuyou']}</p>
 <p style="margin: 10px 0 0 0; font-size: 20px;">月齢: {lunar['age']}（{lunar['phase']}）</p>
 <p style="margin: 10px 0 0 0; font-size: 17px; opacity: 0.95; line-height: 1.7;">{lunar['appearance']}</p>
-<p style="margin: 15px 0 0 0; font-size: 18px; border-top: 1px solid rgba(255,255,255,0.3); padding-top: 15px;">
-<strong>岡山の日の出・日の入り</strong><br>
-日の出: {sun_times['sunrise']} / 日の入り: {sun_times['sunset']}
-</p>
 </div>
 
 <div style="background: #f7fafc; padding: 25px; border-radius: 12px; border-left: 5px solid #4299e1; margin-bottom: 35px;">
