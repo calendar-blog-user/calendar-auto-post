@@ -227,19 +227,17 @@ class AccurateLunarCalendar:
 
 
 class AccurateSunCalculator:
-    """高精度な日の出・日の入り計算（岡山）"""
+    """国立天文台準拠の日の出・日の入り計算（岡山）"""
     
     @staticmethod
     def calculate_sunrise_sunset(date):
-        """岡山の日の出・日の入り時刻を高精度で計算"""
-        # 岡山市の正確な座標
+        """岡山の日の出・日の入り時刻を国立天文台の方式で計算"""
+        # 岡山市の座標
         latitude = 34.6617
         longitude = 133.9350
         
         # ユリウス日の計算
-        y = date.year
-        m = date.month
-        d = date.day
+        y, m, d = date.year, date.month, date.day
         
         if m <= 2:
             y -= 1
@@ -249,68 +247,74 @@ class AccurateSunCalculator:
         b = 2 - a + int(a / 4)
         jd = int(365.25 * (y + 4716)) + int(30.6001 * (m + 1)) + d + b - 1524.5
         
-        # ユリウス世紀数
-        n = jd - 2451545.0
-        T = n / 36525.0
+        # 世界時正午のユリウス日
+        jd_ut = jd - 0.5
         
-        # 太陽の平均黄経
+        # ユリウス世紀数
+        T = (jd_ut - 2451545.0) / 36525.0
+        
+        # 太陽の平均黄経（度）
         L = (280.460 + 36000.771 * T) % 360
         
-        # 太陽の平均近点角
+        # 太陽の平均近点角（度）
         g = (357.528 + 35999.050 * T) % 360
         g_rad = math.radians(g)
         
-        # 黄道傾斜角
+        # 黄道傾斜角（度）
         epsilon = 23.439 - 0.013 * T
         epsilon_rad = math.radians(epsilon)
         
-        # 太陽の黄経
+        # 太陽の視黄経（度）
         lambda_sun = L + 1.915 * math.sin(g_rad) + 0.020 * math.sin(2 * g_rad)
         lambda_rad = math.radians(lambda_sun)
         
-        # 太陽の赤緯
+        # 太陽の赤緯（度）
         sin_delta = math.sin(epsilon_rad) * math.sin(lambda_rad)
         delta = math.degrees(math.asin(sin_delta))
         delta_rad = math.radians(delta)
         
-        # 太陽の赤経
-        tan_alpha = math.cos(epsilon_rad) * math.sin(lambda_rad) / math.cos(lambda_rad)
-        alpha = math.degrees(math.atan(tan_alpha))
-        
-        # 象限補正
-        if math.cos(lambda_rad) < 0:
-            alpha += 180
+        # 太陽の赤経（度）
+        cos_alpha = math.cos(lambda_rad) / math.cos(delta_rad)
+        sin_alpha = math.cos(epsilon_rad) * math.sin(lambda_rad) / math.cos(delta_rad)
+        alpha = math.degrees(math.atan2(sin_alpha, cos_alpha))
         if alpha < 0:
             alpha += 360
         
-        # 均時差
+        # 均時差（時間）
         equation_of_time = (L - alpha) / 15.0
         if equation_of_time > 12:
             equation_of_time -= 24
         elif equation_of_time < -12:
             equation_of_time += 24
         
-        # 時角の計算
+        # 時角（度）
+        # 日の出・日の入りの高度 = -0.8333度（視半径16' + 大気差34'）
+        sun_altitude = -0.8333
         lat_rad = math.radians(latitude)
-        cos_h = -(math.sin(math.radians(-0.833)) + math.sin(lat_rad) * math.sin(delta_rad)) / (math.cos(lat_rad) * math.cos(delta_rad))
+        
+        cos_h = (math.sin(math.radians(sun_altitude)) - math.sin(lat_rad) * math.sin(delta_rad)) / (math.cos(lat_rad) * math.cos(delta_rad))
         
         if cos_h > 1:
+            # 極夜
             h = 0
         elif cos_h < -1:
+            # 白夜
             h = 180
         else:
             h = math.degrees(math.acos(cos_h))
         
-        # 南中時刻
+        # 南中時刻（時）
         noon = 12.0 - equation_of_time - (longitude - 135.0) / 15.0
         
-        # 日の出・日の入り時刻
+        # 日の出・日の入り時刻（時）
         sunrise_time = noon - h / 15.0
         sunset_time = noon + h / 15.0
         
         def to_time_string(decimal_hour):
             hour = int(decimal_hour)
             minute = int((decimal_hour - hour) * 60)
+            if minute >= 60:
+                minute = 59
             if hour < 0:
                 hour += 24
             if hour >= 24:
@@ -449,8 +453,13 @@ class CalendarPostGenerator:
         weekdays = ["月", "火", "水", "木", "金", "土", "日"]
         weekday = weekdays[self.date.weekday()]
         
+        # アイキャッチ画像を生成
+        eyecatch_html = self._generate_eyecatch_image(sekki, kou, lunar)
+        
         # 基本情報セクション（プログラムで生成）
         basic_info = f"""<div style="font-family: 'ヒラギノ角ゴ Pro', 'Hiragino Kaku Gothic Pro', 'メイリオ', Meiryo, sans-serif; max-width: 900px; margin: 0 auto; line-height: 1.9; color: #2d3748;">
+
+{eyecatch_html}
 
 <h2 style="color: #2c5282; border-bottom: 4px solid #4299e1; padding-bottom: 12px; margin-bottom: 25px; font-size: 28px;">📅 今日の暦情報</h2>
 
@@ -657,7 +666,90 @@ class CalendarPostGenerator:
 </div>
 """
     
-    def _generate_rich_fallback_content(self, lunar, sekki, kou):
+    def _generate_eyecatch_image(self, sekki, kou, lunar):
+        """アイキャッチ画像をSVGで生成"""
+        # 季節ごとの配色
+        season_colors = {
+            '立春': ('#FFE4E1', '#FF69B4', '#8B008B'),
+            '雨水': ('#E0F2F7', '#4FC3F7', '#0277BD'),
+            '啓蟄': ('#F1F8E9', '#AED581', '#558B2F'),
+            '春分': ('#FFF9C4', '#FFD54F', '#F57C00'),
+            '清明': ('#F3E5F5', '#BA68C8', '#6A1B9A'),
+            '穀雨': ('#E8F5E9', '#66BB6A', '#2E7D32'),
+            '立夏': ('#FFF3E0', '#FFB74D', '#EF6C00'),
+            '小満': ('#E1F5FE', '#4DD0E1', '#0097A7'),
+            '芒種': ('#F1F8E9', '#9CCC65', '#689F38'),
+            '夏至': ('#FFF9C4', '#FFD54F', '#F57C00'),
+            '小暑': ('#FFEBEE', '#EF5350', '#C62828'),
+            '大暑': ('#FBE9E7', '#FF7043', '#D84315'),
+            '立秋': ('#FFF3E0', '#FFB74D', '#EF6C00'),
+            '処暑': ('#FCE4EC', '#F06292', '#C2185B'),
+            '白露': ('#E3F2FD', '#64B5F6', '#1976D2'),
+            '秋分': ('#FFF9C4', '#FFD54F', '#F57C00'),
+            '寒露': ('#EFEBE9', '#BCAAA4', '#5D4037'),
+            '霜降': ('#F3E5F5', '#BA68C8', '#6A1B9A'),
+            '立冬': ('#E3F2FD', '#64B5F6', '#1976D2'),
+            '小雪': ('#ECEFF1', '#90A4AE', '#455A64'),
+            '大雪': ('#E0F7FA', '#4DD0E1', '#00838F'),
+            '冬至': ('#E8EAF6', '#7986CB', '#3949AB'),
+            '小寒': ('#F3E5F5', '#BA68C8', '#6A1B9A'),
+            '大寒': ('#E1F5FE', '#4FC3F7', '#0277BD')
+        }
+        
+        bg_color, primary_color, accent_color = season_colors.get(sekki[0], ('#E3F2FD', '#64B5F6', '#1976D2'))
+        
+        svg = f"""
+<div style="margin-bottom: 30px; border-radius: 15px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.15);">
+<svg viewBox="0 0 1600 900" xmlns="http://www.w3.org/2000/svg" style="width: 100%; height: auto; display: block;">
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:{bg_color};stop-opacity:1" />
+      <stop offset="100%" style="stop-color:{primary_color};stop-opacity:0.8" />
+    </linearGradient>
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  
+  <!-- 背景 -->
+  <rect width="1600" height="900" fill="url(#bgGradient)"/>
+  
+  <!-- 装飾パターン -->
+  <circle cx="150" cy="150" r="80" fill="{accent_color}" opacity="0.15"/>
+  <circle cx="1450" cy="750" r="120" fill="{accent_color}" opacity="0.15"/>
+  <circle cx="1400" cy="200" r="60" fill="{primary_color}" opacity="0.2"/>
+  <circle cx="200" cy="700" r="90" fill="{primary_color}" opacity="0.2"/>
+  
+  <!-- 月の装飾 -->
+  <circle cx="1350" cy="300" r="100" fill="white" opacity="0.3"/>
+  <circle cx="1360" cy="290" r="100" fill="{primary_color}" opacity="0.2"/>
+  
+  <!-- メインテキスト -->
+  <text x="800" y="350" font-family="'Yu Mincho', 'Noto Serif JP', serif" font-size="120" font-weight="bold" fill="white" text-anchor="middle" filter="url(#shadow)">
+    {sekki[0]}
+  </text>
+  
+  <!-- 読み仮名 -->
+  <text x="800" y="430" font-family="'Yu Mincho', 'Noto Serif JP', serif" font-size="48" fill="white" text-anchor="middle" opacity="0.9">
+    {sekki[1]}
+  </text>
+  
+  <!-- 七十二候 -->
+  <text x="800" y="550" font-family="'Yu Mincho', 'Noto Serif JP', serif" font-size="72" fill="{accent_color}" text-anchor="middle" filter="url(#shadow)">
+    {kou[0]}
+  </text>
+  
+  <!-- 日付 -->
+  <text x="800" y="750" font-family="'Yu Gothic', 'Noto Sans JP', sans-serif" font-size="52" fill="white" text-anchor="middle" opacity="0.85">
+    {self.date.year}年{self.date.month}月{self.date.day}日 旧暦{lunar['month']}月{lunar['day']}日
+  </text>
+  
+  <!-- 下部装飾ライン -->
+  <line x1="400" y1="820" x2="1200" y2="820" stroke="white" stroke-width="3" opacity="0.5"/>
+</svg>
+</div>
+"""
+        return svg
         """フォールバックコンテンツ"""
         return f"""☀️ 季節の移ろい（二十四節気・七十二候）
 
