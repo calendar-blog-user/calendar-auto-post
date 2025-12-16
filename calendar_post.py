@@ -65,30 +65,46 @@ class AccurateSolarTermCalculator:
     def get_current_sekki(cls, date):
         """現在の二十四節気を取得"""
         sekki_data = [
-            (315, "立春", "りっしゅん"), (330, "雨水", "うすい"), (345, "啓蟄", "けいちつ"),
-            (0, "春分", "しゅんぶん"), (15, "清明", "せいめい"), (30, "穀雨", "こくう"),
-            (45, "立夏", "りっか"), (60, "小満", "しょうまん"), (75, "芒種", "ぼうしゅ"),
-            (90, "夏至", "げし"), (105, "小暑", "しょうしょ"), (120, "大暑", "たいしょ"),
-            (135, "立秋", "りっしゅう"), (150, "処暑", "しょしょ"), (165, "白露", "はくろ"),
-            (180, "秋分", "しゅうぶん"), (195, "寒露", "かんろ"), (210, "霜降", "そうこう"),
-            (225, "立冬", "りっとう"), (240, "小雪", "しょうせつ"), (255, "大雪", "たいせつ"),
-            (270, "冬至", "とうじ"), (285, "小寒", "しょうかん"), (300, "大寒", "だいかん")
+            (315, "立春", "りっしゅん", "春の始まり。暦の上では春ですが、まだ寒さが厳しい時期です"),
+            (330, "雨水", "うすい", "雪が雨に変わり、氷が解け始める頃。三寒四温で春に向かいます"),
+            (345, "啓蟄", "けいちつ", "冬眠していた虫が目覚める頃。春の訪れを実感できます"),
+            (0, "春分", "しゅんぶん", "昼夜の長さがほぼ等しくなる日。これから昼が長くなります"),
+            (15, "清明", "せいめい", "万物が清らかで生き生きとする頃。花が咲き誇る季節です"),
+            (30, "穀雨", "こくう", "穀物を潤す春の雨が降る頃。田植えの準備が始まります"),
+            (45, "立夏", "りっか", "夏の始まり。新緑が目に鮮やかな季節です"),
+            (60, "小満", "しょうまん", "草木が茂り、天地に気が満ち始める頃です"),
+            (75, "芒種", "ぼうしゅ", "麦を刈り、稲を植える農繁期。梅雨入りの時期です"),
+            (90, "夏至", "げし", "一年で最も昼が長い日。これから暑さが本格化します"),
+            (105, "小暑", "しょうしょ", "梅雨明け頃。本格的な暑さの始まりです"),
+            (120, "大暑", "たいしょ", "一年で最も暑い時期。夏真っ盛りです"),
+            (135, "立秋", "りっしゅう", "秋の始まり。暦の上では秋ですが、残暑が厳しい時期"),
+            (150, "処暑", "しょしょ", "暑さが峠を越える頃。朝夕が涼しくなり始めます"),
+            (165, "白露", "はくろ", "草木に白い露が宿り始める頃。秋の気配が濃くなります"),
+            (180, "秋分", "しゅうぶん", "昼夜の長さがほぼ等しい。秋彼岸の中日です"),
+            (195, "寒露", "かんろ", "露が冷たく感じられる頃。紅葉が始まります"),
+            (210, "霜降", "そうこう", "朝霜が降り始める頃。秋が深まります"),
+            (225, "立冬", "りっとう", "冬の始まり。暦の上では冬入りです"),
+            (240, "小雪", "しょうせつ", "わずかに雪が降り始める頃。冬の気配が強まります"),
+            (255, "大雪", "たいせつ", "雪が本格的に降り始める頃。山は雪化粧です"),
+            (270, "冬至", "とうじ", "一年で最も昼が短い日。これから日が長くなります"),
+            (285, "小寒", "しょうかん", "寒さが厳しくなり始める頃。寒の入りです"),
+            (300, "大寒", "だいかん", "一年で最も寒い時期。寒さの極みです")
         ]
         
         longitude = cls.calculate_solar_longitude(date)
         current_sekki = sekki_data[0]
         
         for i in range(len(sekki_data)):
-            deg, name, reading = sekki_data[i]
+            deg, name, reading, desc = sekki_data[i]
             next_deg = sekki_data[(i + 1) % len(sekki_data)][0]
             
             if deg <= next_deg:
                 if deg <= longitude < next_deg:
-                    current_sekki = (name, reading)
+                    current_sekki = (name, reading, desc)
                     break
             else:
                 if longitude >= deg or longitude < next_deg:
-                    current_sekki = (name, reading)
+                    current_sekki = (name, reading, desc)
                     break
         
         return current_sekki
@@ -522,8 +538,14 @@ class CalendarPostGenerator:
 </div>
 
 <div style="background: #f7fafc; padding: 25px; border-radius: 12px; border-left: 5px solid #4299e1; margin-bottom: 35px;">
-<p style="margin: 0 0 10px 0; font-size: 18px;"><strong>二十四節気:</strong> {sekki[0]}（{sekki[1]}）</p>
-<p style="margin: 0; font-size: 18px;"><strong>七十二候:</strong> {kou[0]}（{kou[1]}）</p>
+<div style="margin-bottom: 20px;">
+<p style="margin: 0 0 8px 0; font-size: 18px;"><strong>二十四節気:</strong> {sekki[0]}（{sekki[1]}）</p>
+<p style="margin: 0; font-size: 15px; color: #4A5568; line-height: 1.8;">{sekki[2]}</p>
+</div>
+<div>
+<p style="margin: 0 0 8px 0; font-size: 18px;"><strong>七十二候:</strong> {kou[0]}（{kou[1]}）</p>
+<p style="margin: 0; font-size: 15px; color: #4A5568; line-height: 1.8;">{kou[2]}</p>
+</div>
 </div>
 
 <hr style="border: none; border-top: 3px solid #e2e8f0; margin: 40px 0;">
@@ -744,58 +766,29 @@ class CalendarPostGenerator:
         
         bg_color, primary_color, accent_color = season_colors.get(sekki[0], ('#E3F2FD', '#64B5F6', '#1976D2'))
         
-        svg = f"""
-<div style="margin-bottom: 30px; border-radius: 15px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.15);">
-<svg viewBox="0 0 1600 900" xmlns="http://www.w3.org/2000/svg" style="width: 100%; height: auto; display: block;">
-  <defs>
-    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:{bg_color};stop-opacity:1" />
-      <stop offset="100%" style="stop-color:{primary_color};stop-opacity:0.8" />
-    </linearGradient>
-    <filter id="shadow">
-      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-opacity="0.3"/>
-    </filter>
-  </defs>
-  
-  <!-- 背景 -->
-  <rect width="1600" height="900" fill="url(#bgGradient)"/>
-  
-  <!-- 装飾パターン -->
-  <circle cx="150" cy="150" r="80" fill="{accent_color}" opacity="0.15"/>
-  <circle cx="1450" cy="750" r="120" fill="{accent_color}" opacity="0.15"/>
-  <circle cx="1400" cy="200" r="60" fill="{primary_color}" opacity="0.2"/>
-  <circle cx="200" cy="700" r="90" fill="{primary_color}" opacity="0.2"/>
-  
-  <!-- 月の装飾 -->
-  <circle cx="1350" cy="300" r="100" fill="white" opacity="0.3"/>
-  <circle cx="1360" cy="290" r="100" fill="{primary_color}" opacity="0.2"/>
-  
-  <!-- メインテキスト -->
-  <text x="800" y="350" font-family="'Yu Mincho', 'Noto Serif JP', serif" font-size="120" font-weight="bold" fill="white" text-anchor="middle" filter="url(#shadow)">
-    {sekki[0]}
-  </text>
-  
-  <!-- 読み仮名 -->
-  <text x="800" y="430" font-family="'Yu Mincho', 'Noto Serif JP', serif" font-size="48" fill="white" text-anchor="middle" opacity="0.9">
-    {sekki[1]}
-  </text>
-  
-  <!-- 七十二候 -->
-  <text x="800" y="550" font-family="'Yu Mincho', 'Noto Serif JP', serif" font-size="72" fill="{accent_color}" text-anchor="middle" filter="url(#shadow)">
-    {kou[0]}
-  </text>
-  
-  <!-- 日付 -->
-  <text x="800" y="750" font-family="'Yu Gothic', 'Noto Sans JP', sans-serif" font-size="52" fill="white" text-anchor="middle" opacity="0.85">
-    {self.date.year}年{self.date.month}月{self.date.day}日 旧暦{lunar['month']}月{lunar['day']}日
-  </text>
-  
-  <!-- 下部装飾ライン -->
-  <line x1="400" y1="820" x2="1200" y2="820" stroke="white" stroke-width="3" opacity="0.5"/>
-</svg>
+        # HTMLとして直接レンダリング可能な画像を生成
+        html = f"""
+<div style="margin-bottom: 30px; border-radius: 15px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.15); background: linear-gradient(135deg, {bg_color} 0%, {primary_color} 100%); position: relative; aspect-ratio: 16/9;">
+  <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; width: 90%;">
+    <div style="font-family: 'Yu Mincho', 'Noto Serif JP', serif; font-size: clamp(40px, 8vw, 120px); font-weight: bold; color: white; text-shadow: 0 4px 10px rgba(0,0,0,0.3); margin-bottom: 15px;">
+      {sekki[0]}
+    </div>
+    <div style="font-family: 'Yu Mincho', 'Noto Serif JP', serif; font-size: clamp(20px, 3vw, 48px); color: white; opacity: 0.9; margin-bottom: 30px;">
+      {sekki[1]}
+    </div>
+    <div style="font-family: 'Yu Mincho', 'Noto Serif JP', serif; font-size: clamp(30px, 5vw, 72px); color: {accent_color}; text-shadow: 0 4px 10px rgba(0,0,0,0.3); margin-bottom: 20px;">
+      {kou[0]}
+    </div>
+    <div style="font-family: 'Yu Gothic', 'Noto Sans JP', sans-serif; font-size: clamp(18px, 3vw, 52px); color: white; opacity: 0.85;">
+      {self.date.year}年{self.date.month}月{self.date.day}日 旧暦{lunar['month']}月{lunar['day']}日
+    </div>
+  </div>
+  <div style="position: absolute; top: 100px; right: 150px; width: 200px; height: 200px; border-radius: 50%; background: white; opacity: 0.15;"></div>
+  <div style="position: absolute; bottom: 80px; left: 100px; width: 150px; height: 150px; border-radius: 50%; background: {accent_color}; opacity: 0.1;"></div>
+  <div style="position: absolute; bottom: 30px; left: 0; right: 0; height: 3px; background: white; opacity: 0.5; margin: 0 200px;"></div>
 </div>
 """
-        return svg
+        return html
     
     def _generate_rich_fallback_content(self, lunar, sekki, kou):
         """充実したフォールバックコンテンツ"""
