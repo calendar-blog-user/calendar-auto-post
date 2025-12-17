@@ -1045,52 +1045,52 @@ class BloggerPoster:
         self.credentials = None
         self.service = None
         
-    def authenticate(self):
-    """Google APIの認証（エラーハンドリング強化版）"""
-    creds = None
-    
-    # トークンの読み込み
-    if os.environ.get('GOOGLE_TOKEN'):
-        try:
-            token_data = json.loads(os.environ['GOOGLE_TOKEN'])
-            creds = Credentials.from_authorized_user_info(token_data, SCOPES)
-            print("✅ トークンを読み込みました")
-        except Exception as e:
-            print(f"⚠️ トークン読み込みエラー: {e}")
-            creds = None
-    
-    # トークンの検証とリフレッシュ
-    if creds:
-        if creds.valid:
-            print("✅ トークンは有効です")
-        elif creds.expired and creds.refresh_token:
-            print("🔄 トークンをリフレッシュ中...")
+def authenticate(self):
+        """Google APIの認証（エラーハンドリング強化版）"""
+        creds = None
+        
+        # トークンの読み込み
+        if os.environ.get('GOOGLE_TOKEN'):
             try:
-                creds.refresh(Request())
-                print("✅ トークンリフレッシュ成功")
-                # 新しいトークンを出力（手動更新用）
-                new_token = json.loads(creds.to_json())
-                print("=" * 70)
-                print("📝 新しいトークンが生成されました")
-                print("   GitHub SecretsのGOOGLE_TOKENを以下で更新してください:")
-                print("=" * 70)
-                print(json.dumps(new_token, indent=2))
-                print("=" * 70)
+                token_data = json.loads(os.environ['GOOGLE_TOKEN'])
+                creds = Credentials.from_authorized_user_info(token_data, SCOPES)
+                print("✅ トークンを読み込みました")
             except Exception as e:
-                print(f"❌ トークンリフレッシュ失敗: {e}")
-                print("\n💡 解決方法:")
-                print("   1. ローカルPCで: py generate_token.py")
-                print("   2. 生成されたtoken.jsonをGitHub Secretsに設定")
-                raise Exception(f"トークンの更新に失敗しました: {str(e)}")
+                print(f"⚠️ トークン読み込みエラー: {e}")
+                creds = None
+        
+        # トークンの検証とリフレッシュ
+        if creds:
+            if creds.valid:
+                print("✅ トークンは有効です")
+            elif creds.expired and creds.refresh_token:
+                print("🔄 トークンをリフレッシュ中...")
+                try:
+                    creds.refresh(Request())
+                    print("✅ トークンリフレッシュ成功")
+                    # 新しいトークンを出力（手動更新用）
+                    new_token = json.loads(creds.to_json())
+                    print("=" * 70)
+                    print("📝 新しいトークンが生成されました")
+                    print("   GitHub SecretsのGOOGLE_TOKENを以下で更新してください:")
+                    print("=" * 70)
+                    print(json.dumps(new_token, indent=2))
+                    print("=" * 70)
+                except Exception as e:
+                    print(f"❌ トークンリフレッシュ失敗: {e}")
+                    print("\n💡 解決方法:")
+                    print("   1. ローカルPCで: py generate_token.py")
+                    print("   2. 生成されたtoken.jsonをGitHub Secretsに設定")
+                    raise Exception(f"トークンの更新に失敗しました: {str(e)}")
+            else:
+                print("⚠️ トークンが無効です（リフレッシュトークンなし）")
+                raise Exception("認証情報が無効です。ローカルで再認証してください。")
         else:
-            print("⚠️ トークンが無効です（リフレッシュトークンなし）")
-            raise Exception("認証情報が無効です。ローカルで再認証してください。")
-    else:
-        raise Exception("GOOGLE_TOKEN環境変数が設定されていません")
-    
-    self.credentials = creds
-    self.service = build('blogger', 'v3', credentials=creds)
-    print("✅ Blogger APIサービスを初期化しました")
+            raise Exception("GOOGLE_TOKEN環境変数が設定されていません")
+        
+        self.credentials = creds
+        self.service = build('blogger', 'v3', credentials=creds)
+        print("✅ Blogger APIサービスを初期化しました")
         
     def post_to_blog(self, blog_id, title, content, labels):
         """Bloggerに投稿"""
