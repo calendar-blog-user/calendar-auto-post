@@ -1045,7 +1045,7 @@ class BloggerPoster:
         self.credentials = None
         self.service = None
         
-def authenticate(self):
+    def def def auth(self):
         """Google APIの認証（エラーハンドリング強化版）"""
         creds = None
         
